@@ -1,4 +1,12 @@
 package AST.Expr;
 
-public class AssignExpr {
+import AST.ASTVisitor;
+
+public class AssignExpr extends Expression {
+    public Expression lhs, rhs;
+
+    @Override
+    public void accept(ASTVisitor visitor) {
+        visitor.visit(this);
+    }
 }

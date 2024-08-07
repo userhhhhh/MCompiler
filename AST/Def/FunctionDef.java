@@ -2,8 +2,9 @@ package AST.Def;
 
 import AST.ASTVisitor;
 import java.util.ArrayList;
+import AST.Stmt.Suite;
 
-public class FunctionDef {
+public class FunctionDef extends Definition {
     public String name;
     public String returnType;
     public ArrayList<String> parameterNames = new ArrayList<>();
@@ -17,6 +18,7 @@ public class FunctionDef {
         this.body = body;
     }
 
+    @Override
     public void accept(ASTVisitor visitor) {
         visitor.visit(this);
     }

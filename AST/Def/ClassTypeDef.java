@@ -1,11 +1,10 @@
 package AST.Def;
 
-import AST.ASTNode;
 import AST.ASTVisitor;
 import java.util.ArrayList;
 
 
-public class ClassTypeDef extends ASTNode {
+public class ClassTypeDef extends Definition {
     public String name;
     public ArrayList<VariableDef> varList;
     public ArrayList<FunctionDef> funcList;

@@ -2,10 +2,8 @@ package AST;
 
 import Util.position;
 
-public class ASTNode {
+abstract public class ASTNode {
     public position pos;
 
-    abstract public void accept(ASTVisitor visitor) {
-        visitor.visit(this);
-    }
+    public abstract void accept(ASTVisitor visitor);
 }

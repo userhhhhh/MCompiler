@@ -1,9 +1,10 @@
 package AST;
 
-import AST.ASTNode;
+import AST.Def.Definition;
+import java.util.ArrayList;
 
 public class Program extends ASTNode {
-    public List<Definition> defList;
+    public ArrayList<Definition> defList;
 
     Program() {
         defList = new ArrayList<>();

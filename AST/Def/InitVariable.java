@@ -1,11 +1,16 @@
 package AST.Def;
 
-public class InitVariable {
-    public String type;
-    public String name;
-    public Expr init;
+import AST.ASTVisitor;
+import AST.Expr.Expression;
+import Util.Type;
+import AST.ASTNode;
 
-    public InitVariable(String type, String name, Expr init) {
+public class InitVariable extends ASTNode{
+    public Type type;
+    public String name;
+    public Expression init;
+
+    public InitVariable(Type type, String name, Expression init) {
         this.type = type;
         this.name = name;
         this.init = init;
