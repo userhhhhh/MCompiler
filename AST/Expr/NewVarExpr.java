@@ -6,9 +6,8 @@ import Util.position;
 public class NewVarExpr extends Expression {
     public String varName;
 
-    public NewVarExpr(String varName, position pos) {
+    public NewVarExpr(position pos) {
         super(pos);
-        this.varName = varName;
     }
 
     @Override

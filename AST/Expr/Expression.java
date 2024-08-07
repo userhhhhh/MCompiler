@@ -6,7 +6,7 @@ import AST.ASTVisitor;
 import Util.position;
 
 
-public class Expression extends ASTNode {
+abstract public class Expression extends ASTNode {
     public Type type;
 
     public Expression(position pos) {
@@ -14,7 +14,5 @@ public class Expression extends ASTNode {
     }
 
     @Override
-    public void accept(ASTVisitor visitor) {
-        visitor.visit(this);
-    }
+    public abstract void accept(ASTVisitor visitor);
 }

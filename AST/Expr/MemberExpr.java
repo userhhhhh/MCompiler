@@ -7,14 +7,12 @@ public class MemberExpr extends Expression {
     public Expression base;
     public String memberName;
 
-    public MemberExpr(Expression base, String memberName, position pos) {
+    public MemberExpr(position pos) {
         super(pos);
-        this.base = base;
-        this.memberName = memberName;
     }
 
     @Override
-    public void accept(ASTVisitor v) {
-        v.visit(this);
+    public void accept(ASTVisitor visitor) {
+        visitor.visit(this);
     }
 }

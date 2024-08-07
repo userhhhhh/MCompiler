@@ -7,11 +7,8 @@ public class BinaryExpr extends Expression {
     public String op;
     public Expression lhs, rhs;
 
-    public BinaryExpr(Expression lhs, String op, Expression rhs, position pos) {
+    public BinaryExpr(position pos) {
         super(pos);
-        this.lhs = lhs;
-        this.op = op;
-        this.rhs = rhs;
     }
 
     @Override

@@ -7,13 +7,10 @@ import Util.position;
 public class MethodCallExpr extends Expression {
     public Expression base;
     public String methodName;
-    public ArrayList<Expression> parameters;
+    public ParallelExp callExpList;
 
-    public MethodCallExpr(Expression base, String methodName, ArrayList<Expression> parameters, position pos) {
+    public MethodCallExpr(position pos) {
         super(pos);
-        this.base = base;
-        this.methodName = methodName;
-        this.parameters = parameters;
     }
 
     @Override

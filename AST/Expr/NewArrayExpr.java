@@ -7,13 +7,12 @@ import Util.position;
 public class NewArrayExpr extends Expression {
     public Type baseType;
     public Expression size;
+    public
     // TODO
     // 数组
 
-    public NewArrayExpr(Type baseType, Expression size, position pos) {
+    public NewArrayExpr(position pos) {
         super(pos);
-        this.baseType = baseType;
-        this.size = size;
     }
 
     @Override

@@ -1,17 +1,15 @@
 package AST.Expr;
 
-import Util.Type;
 import AST.ASTVisitor;
 import Util.position;
+import AST.Expr.Expression;
 
 public class ArrayExpr extends Expression {
-    public Type baseType;
+    public Expression baseType;
     public Expression size;
 
-    public ArrayExpr(Type baseType, Expression size, position pos) {
+    public ArrayExpr(position pos) {
         super(pos);
-        this.baseType = baseType;
-        this.size = size;
     }
 
     @Override

@@ -8,11 +8,8 @@ public class ConditionalExpr extends Expression {
     public Expression trueBranch;
     public Expression falseBranch;
 
-    public ConditionalExpr(Expression condition, Expression trueBranch, Expression falseBranch, position pos) {
+    public ConditionalExpr(position pos) {
         super(pos);
-        this.condition = condition;
-        this.trueBranch = trueBranch;
-        this.falseBranch = falseBranch;
     }
 
     @Override

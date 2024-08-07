@@ -9,6 +9,17 @@ public class Type {
     public String typeName = null;
     public int dim = 0;
 
+    public Type(){
+        isInt = false;
+        isBool = false;
+        isString = false;
+        isNull = false;
+        isVoid = false;
+        isClass = false;
+        typeName = null;
+        dim = 0;
+    }
+
     public Type(String typeName, int dim) {
         this.typeName = typeName;
         this.dim = dim;
@@ -48,4 +59,74 @@ public class Type {
         if (isVoid && other.isVoid) return true;
         return !isVoid && !other.isVoid && typeName.equals(other.typeName) && dim == other.dim;
     }
+
+    public void setInt() {
+        isInt = true;
+        isBool = false;
+        isString = false;
+        isNull = false;
+        isVoid = false;
+        isClass = false;
+        typeName = "int";
+        dim = 0;
+    }
+
+    public void setBool() {
+        isInt = false;
+        isBool = true;
+        isString = false;
+        isNull = false;
+        isVoid = false;
+        isClass = false;
+        typeName = "bool";
+        dim = 0;
+    }
+
+    public void setString() {
+        isInt = false;
+        isBool = false;
+        isString = true;
+        isNull = false;
+        isVoid = false;
+        isClass = false;
+        typeName = "string";
+        dim = 0;
+    }
+
+    public void setVoid() {
+        isInt = false;
+        isBool = false;
+        isString = false;
+        isNull = false;
+        isVoid = true;
+        isClass = false;
+        typeName = "void";
+        dim = 0;
+    }
+
+    public void setNull() {
+        isInt = false;
+        isBool = false;
+        isString = false;
+        isNull = true;
+        isVoid = false;
+        isClass = false;
+        typeName = "null";
+        dim = 0;
+    }
+
+    public void setClass(String className) {
+        isInt = false;
+        isBool = false;
+        isString = false;
+        isNull = false;
+        isVoid = false;
+        isClass = true;
+        typeName = className;
+        dim = 0;
+    }
+
+
+
+
 }

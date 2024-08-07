@@ -62,7 +62,7 @@ statement
 
 //表达式，不含有分号
 expr
-    : New typeName ('[' expr? ']')+                          #newArrayExpr
+    : New typeName ('[' expr? ']')+ arrayConst?              #newArrayExpr
     | New typeName ('(' ')')?                                #newVarExpr
     |'(' expr ')'                                            #parenExpr
     | expr '.' Identifier                                    #memberExpr
@@ -100,6 +100,10 @@ primary
 
 parallelExp
     : expr ( ',' expr )*
+    ;
+
+arrayConst
+    : '{' IntLiteral ( ',' IntLiteral )* '}'
     ;
 
 IntLiteral : [1-9][0-9]* | '0' ;

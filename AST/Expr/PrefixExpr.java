@@ -7,10 +7,8 @@ public class PrefixExpr extends Expression {
     public String op;
     public Expression expr;
 
-    public PrefixExpr(String op, Expression expr, position pos) {
+    public PrefixExpr(position pos) {
         super(pos);
-        this.op = op;
-        this.expr = expr;
     }
 
     @Override

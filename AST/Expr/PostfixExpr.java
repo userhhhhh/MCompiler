@@ -7,10 +7,8 @@ public class PostfixExpr extends Expression {
     public Expression expr;
     public String op;
 
-    public PostfixExpr(Expression expr, String op, position pos) {
+    public PostfixExpr(position pos) {
         super(pos);
-        this.expr = expr;
-        this.op = op;
     }
 
     @Override

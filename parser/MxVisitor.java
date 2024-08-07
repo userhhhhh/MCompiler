@@ -245,6 +245,12 @@ public interface MxVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitParallelExp(MxParser.ParallelExpContext ctx);
 	/**
+	 * Visit a parse tree produced by {@link MxParser#arrayConst}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitArrayConst(MxParser.ArrayConstContext ctx);
+	/**
 	 * Visit a parse tree produced by {@link MxParser#fmtString}.
 	 * @param ctx the parse tree
 	 * @return the visitor result

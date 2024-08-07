@@ -8,11 +8,8 @@ public class IfStmt extends StmtNode {
     public StmtNode thenStmt, elseStmt;
     public Expression condition;
 
-    public IfStmt(Expression condition, StmtNode thenStmt, StmtNode elseStmt, position pos) {
+    public IfStmt(position pos) {
         super(pos);
-        this.condition = condition;
-        this.thenStmt = thenStmt;
-        this.elseStmt = elseStmt;
     }
 
     @Override

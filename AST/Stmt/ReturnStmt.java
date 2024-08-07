@@ -7,9 +7,8 @@ import Util.position;
 public class ReturnStmt extends StmtNode {
     public Expression expr;
 
-    public ReturnStmt(Expression expr, position pos) {
+    public ReturnStmt(position pos) {
         super(pos);
-        this.expr = expr;
     }
 
     @Override

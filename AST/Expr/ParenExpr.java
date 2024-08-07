@@ -6,9 +6,8 @@ import Util.position;
 public class ParenExpr extends Expression {
     public Expression expr;
 
-    public ParenExpr(Expression expr, position pos) {
+    public ParenExpr(position pos) {
         super(pos);
-        this.expr = expr;
     }
 
     @Override

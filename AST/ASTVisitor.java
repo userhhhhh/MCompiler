@@ -6,6 +6,7 @@ import AST.Stmt.*;
 
 public interface ASTVisitor {
     void visit(Program node);
+
     void visit(ClassTypeDef node);
     void visit(FunctionDef node);
     void visit(VariableDef node);
@@ -14,10 +15,11 @@ public interface ASTVisitor {
     void visit(Expression node);
     void visit(ArrayExpr node);
     void visit(BinaryExpr node);
+    void visit(ParallelExp node);
+    void visit(FuncCallExpr node);
 
     void visit(BreakStmt node);
     void visit(ContinueStmt node);
-    void visit(EmptyStmt node);
     void visit(ExprStmt node);
     void visit(ForStmt node);
     void visit(IfStmt node);

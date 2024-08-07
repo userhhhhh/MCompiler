@@ -406,6 +406,16 @@ public interface MxListener extends ParseTreeListener {
 	 */
 	void exitParallelExp(MxParser.ParallelExpContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link MxParser#arrayConst}.
+	 * @param ctx the parse tree
+	 */
+	void enterArrayConst(MxParser.ArrayConstContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link MxParser#arrayConst}.
+	 * @param ctx the parse tree
+	 */
+	void exitArrayConst(MxParser.ArrayConstContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link MxParser#fmtString}.
 	 * @param ctx the parse tree
 	 */

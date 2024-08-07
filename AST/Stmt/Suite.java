@@ -7,9 +7,8 @@ import Util.position;
 public class Suite extends StmtNode {
     public ArrayList<StmtNode> stmt;
 
-    public Suite(ArrayList<StmtNode> stmt, position pos) {
+    public Suite(position pos) {
         super(pos);
-        this.stmt = stmt;
     }
 
     @Override

@@ -6,10 +6,8 @@ import Util.position;
 public class AssignExpr extends Expression {
     public Expression lhs, rhs;
 
-    public AssignExpr(Expression lhs, Expression rhs, position pos) {
+    public AssignExpr(position pos) {
         super(pos);
-        this.lhs = lhs;
-        this.rhs = rhs;
     }
 
     @Override

@@ -7,10 +7,8 @@ public class UnaryExpr extends Expression {
     public Expression expr;
     public String op;
 
-    public UnaryExpr(Expression expr, String op, position pos) {
+    public UnaryExpr(position pos) {
         super(pos);
-        this.expr = expr;
-        this.op = op;
     }
 
     @Override

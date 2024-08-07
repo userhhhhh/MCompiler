@@ -4,20 +4,17 @@ import AST.ASTVisitor;
 import java.util.ArrayList;
 import AST.Stmt.Suite;
 import Util.position;
+import Util.Type;
 
 public class FunctionDef extends Definition {
     public String name;
-    public String returnType;
+    public Type returnType;
+    public ArrayList<Type> parameters;
     public ArrayList<String> parameterNames = new ArrayList<>();
-    public ArrayList<String> parameters;
     public Suite body;
 
-    public FunctionDef(String name, String returnType, ArrayList<String> parameters, Suite body, position pos) {
+    public FunctionDef(position pos) {
         super(pos);
-        this.name = name;
-        this.returnType = returnType;
-        this.parameters = parameters;
-        this.body = body;
     }
 
     @Override
