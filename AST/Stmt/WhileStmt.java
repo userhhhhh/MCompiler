@@ -2,12 +2,14 @@ package AST.Stmt;
 
 import AST.ASTVisitor;
 import AST.Expr.Expression;
+import Util.position;
 
 public class WhileStmt extends StmtNode {
     public StmtNode body;
     public Expression condition;
 
-    public WhileStmt(Expression condition, StmtNode body) {
+    public WhileStmt(Expression condition, StmtNode body, position pos) {
+        super(pos);
         this.condition = condition;
         this.body = body;
     }

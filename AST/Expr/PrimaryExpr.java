@@ -1,6 +1,7 @@
 package AST.Expr;
 
 import AST.ASTVisitor;
+import Util.position;
 
 public class PrimaryExpr extends Expression {
     public boolean isIdentifier = false;
@@ -17,7 +18,8 @@ public class PrimaryExpr extends Expression {
     public String stringLiteral = null;
     public String fmtString = null;
 
-    public PrimaryExpr() {
+    public PrimaryExpr(position pos) {
+        super(pos);
     }
 
     @Override
