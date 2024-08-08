@@ -9,14 +9,14 @@ import AST.Stmt.*;
 import parser.MxBaseVisitor;
 import parser.MxParser;
 import Util.Type;
-import Util.globalScope;
+import Util.Scope;
 import Util.position;
 
 public class ASTBuilder extends MxBaseVisitor<ASTNode> {
 
-    private globalScope gScope;
+    private Scope gScope;
 
-    public ASTBuilder(globalScope gScope) {
+    public ASTBuilder(Scope gScope) {
         this.gScope = gScope;
     }
 
