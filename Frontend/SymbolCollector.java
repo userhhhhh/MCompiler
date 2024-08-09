@@ -19,7 +19,6 @@ public class SymbolCollector implements ASTVisitor {
 
     @Override public void visit(ClassTypeDef it) {
         ClassInfor struct = new ClassInfor(it);
-        it.varList.forEach(vd -> vd.accept(this));
         gScope.addClassInfo(it.name, struct, it.pos);
     }
 

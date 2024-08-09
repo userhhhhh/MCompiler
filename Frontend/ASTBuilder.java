@@ -69,6 +69,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         VariableDef varDef = new VariableDef(new position(ctx));
         varDef.type = visitType(ctx.typeName());
         ctx.initVariable().forEach(iv -> varDef.initVariablelist.add((InitVariable) visit(iv)));
+        varDef.initVariablelist.forEach(iv -> iv.type = varDef.type);
         return varDef;
     }
 
@@ -344,9 +345,11 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
             type.setString();
         } else if (ctx.Void() != null) {
             type.setVoid();
-        } else {
-            // TODO: not sure
+        } else if (ctx.Identifier() != null) {
             type.setClass(ctx.Identifier().getText());
+        } else {
+            type = visitType(ctx.typeName());
+            type.setDim(ctx.dim().size());
         }
         return type;
     }

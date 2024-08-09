@@ -5,15 +5,12 @@ import AST.ASTNode;
 import Util.position;
 
 public class Definition extends ASTNode {
-    public ClassTypeDef classDef;
-    public FunctionDef funcDef;
-    public VariableDef variDef;
+    public ClassTypeDef classDef = null;
+    public FunctionDef funcDef = null;
+    public VariableDef variDef = null;
 
     public Definition(position pos) {
         super(pos);
-        classDef = null;
-        funcDef = null;
-        variDef = null;
     }
 
     @Override

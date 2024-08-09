@@ -9,7 +9,7 @@ import Util.Type;
 public class FunctionDef extends Definition {
     public String name;
     public Type returnType;
-    public ArrayList<Type> parameters;
+    public ArrayList<Type> parameters = new ArrayList<>();
     public ArrayList<String> parameterNames = new ArrayList<>();
     public Suite body;
 

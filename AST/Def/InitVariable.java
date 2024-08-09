@@ -7,6 +7,7 @@ import AST.ASTNode;
 import Util.position;
 
 public class InitVariable extends ASTNode{
+    public Type type;
     public String name;
     public Expression init;
 

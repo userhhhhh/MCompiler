@@ -5,11 +5,10 @@ import java.util.ArrayList;
 import Util.position;
 
 public class Program extends ASTNode {
-    public ArrayList<Definition> defList;
+    public ArrayList<Definition> defList = new ArrayList<>();
 
     public Program(position pos) {
         super(pos);
-        defList = new ArrayList<>();
     }
 
     @Override

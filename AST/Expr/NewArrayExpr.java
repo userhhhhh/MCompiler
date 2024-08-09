@@ -3,13 +3,14 @@ package AST.Expr;
 import Util.Type;
 import AST.ASTVisitor;
 import Util.position;
+import java.util.ArrayList;
+import AST.Literal;
 
 public class NewArrayExpr extends Expression {
     public Type baseType;
-    public Expression size;
-    public
-    // TODO
-    // 数组
+    public ArrayList<Expression> size;
+    public int dim;
+    public ArrayList<Literal> literal;
 
     public NewArrayExpr(position pos) {
         super(pos);

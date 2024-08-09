@@ -6,11 +6,10 @@ import AST.ASTVisitor;
 import Util.position;
 
 public class ParallelExp extends ASTNode {
-    public ArrayList<Expression> expList;
+    public ArrayList<Expression> expList = new ArrayList<>();
 
     public ParallelExp(position pos) {
         super(pos);
-        expList = new ArrayList<>();
     }
 
     @Override

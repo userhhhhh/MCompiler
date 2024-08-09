@@ -7,11 +7,10 @@ import Util.position;
 
 public class VariableDef extends Definition {
     public Type type;
-    public ArrayList<InitVariable> initVariablelist;
+    public ArrayList<InitVariable> initVariablelist = new ArrayList<>();
 
     public VariableDef(position pos) {
         super(pos);
-        initVariablelist = new ArrayList<>();
     }
 
     @Override
