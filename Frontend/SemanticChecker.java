@@ -137,7 +137,10 @@ public class SemanticChecker implements ASTVisitor {
     @Override public void visit(ArrayExpr it) {
         it.baseType.accept(this);
         it.size.accept(this);
-        if(!it.size.type.isInt) {
+        if(!it.size.type.isInt || it.size.type.dim > 0) {
+            throw new semanticError("type not match", it.pos);
+        }
+        if(it.baseType instanceof NewArrayExpr) {
             throw new semanticError("type not match", it.pos);
         }
         it.type = new Type(it.baseType.type);
@@ -162,7 +165,8 @@ public class SemanticChecker implements ASTVisitor {
                 if(it.lhs.type.isString && it.rhs.type.isString) {
                     it.type = new Type();
                     it.type.setBool();
-                } else if(it.lhs.type.isInt && it.rhs.type.isInt) {
+                } else if(it.lhs.type.isInt && it.rhs.type.isInt
+                        && it.lhs.type.dim == 0 && it.rhs.type.dim == 0) {
                     it.type = new Type();
                     it.type.setBool();
                 } else {
@@ -170,7 +174,8 @@ public class SemanticChecker implements ASTVisitor {
                 }
             }
             case "+" -> {
-                if(it.lhs.type.isInt && it.rhs.type.isInt) {
+                if(it.lhs.type.isInt && it.rhs.type.isInt
+                        && it.lhs.type.dim == 0 && it.rhs.type.dim == 0) {
                     it.type = new Type();
                     it.type.setInt();
                 } else if(it.lhs.type.isString && it.rhs.type.isString) {
@@ -197,6 +202,9 @@ public class SemanticChecker implements ASTVisitor {
             }
             case "*", "/", "%", "-", ">>", "<<", "&", "|", "^" -> {
                 if(!it.lhs.type.isInt || !it.rhs.type.isInt) {
+                    throw new semanticError("type not match", it.pos);
+                }
+                if(it.lhs.type.dim > 0 || it.rhs.type.dim > 0) {
                     throw new semanticError("type not match", it.pos);
                 }
                 it.type = new Type();
@@ -267,6 +275,14 @@ public class SemanticChecker implements ASTVisitor {
             throw new semanticError("class " + it.baseType.typeName + " not defined", it.pos);
         }
         // TODO
+        if(!it.size.isEmpty()) {
+            it.size.forEach(e -> e.accept(this));
+            for(var e : it.size) {
+                if(!e.type.isInt || e.type.dim > 0) {
+                    throw new semanticError("type not match", it.pos);
+                }
+            }
+        }
     }
     @Override public void visit(NewVarExpr it) {
         if(it.type.isVoid || it.type.isNull || it.type.dim > 0) {
@@ -281,13 +297,13 @@ public class SemanticChecker implements ASTVisitor {
     @Override public void visit(ParenExpr it) {}
     @Override public void visit(PostfixExpr it) {
         it.expr.accept(this);
-        if(!it.expr.type.isInt) {
+        if(!it.expr.type.isInt || it.expr.type.dim > 0) {
             throw new semanticError("type not match", it.pos);
         }
     }
     @Override public void visit(PrefixExpr it) {
         it.expr.accept(this);
-        if(!it.expr.type.isInt) {
+        if(!it.expr.type.isInt || it.expr.type.dim > 0) {
             throw new semanticError("type not match", it.pos);
         }
     }
@@ -321,7 +337,7 @@ public class SemanticChecker implements ASTVisitor {
         switch (it.op) {
             case "+", "-", "~" -> {
                 it.expr.accept(this);
-                if(!it.expr.type.isInt) {
+                if(!it.expr.type.isInt || it.expr.type.dim > 0) {
                     throw new semanticError("type not match", it.pos);
                 }
                 it.type = new Type();

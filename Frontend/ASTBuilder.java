@@ -167,12 +167,11 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if (ctx == null) return null;
         NewArrayExpr newArrayExpr = new NewArrayExpr(new position(ctx));
         newArrayExpr.baseType = visitAtomType(ctx.typeAtom());
-        newArrayExpr.dim = ctx.count.size();
         if(ctx.expr() != null) {
             ctx.expr().forEach(e -> newArrayExpr.size.add((Expression) visit(e)));
         }
         newArrayExpr.type = new Type(newArrayExpr.baseType);
-        newArrayExpr.type.dim = newArrayExpr.dim;
+        newArrayExpr.type.dim = ctx.count.size();
         // TODO
         return newArrayExpr;
     }
@@ -209,7 +208,8 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         PostfixExpr postfixExpr = new PostfixExpr(new position(ctx));
         postfixExpr.op = ctx.op.getText();
         postfixExpr.expr = (Expression) visit(ctx.expr());
-        postfixExpr.type = new Type(postfixExpr.expr.type);
+        postfixExpr.type = new Type();
+        postfixExpr.type.setInt();
         return postfixExpr;
     }
 
@@ -219,7 +219,8 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         PrefixExpr prefixExpr = new PrefixExpr(new position(ctx));
         prefixExpr.op = ctx.op.getText();
         prefixExpr.expr = (Expression) visit(ctx.expr());
-        prefixExpr.type = new Type(prefixExpr.expr.type);
+        prefixExpr.type = new Type();
+        prefixExpr.type.setInt();
         return prefixExpr;
     }
 
@@ -316,9 +317,10 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if (ctx == null) return null;
         IfStmt ifStmt = new IfStmt(new position(ctx));
         ifStmt.condition = (Expression) visit(ctx.expr());
-        ifStmt.thenStmt = (Suite) visit(ctx.statement(0));
+        // 错误：不能写成 (Suite)
+        ifStmt.thenStmt = (StmtNode) visit(ctx.statement(0));
         if (ctx.statement().size() == 2) {
-            ifStmt.elseStmt = (Suite) visit(ctx.statement(1));
+            ifStmt.elseStmt = (StmtNode) visit(ctx.statement(1));
         }
         return ifStmt;
     }
