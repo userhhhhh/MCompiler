@@ -89,6 +89,13 @@ public class SemanticChecker implements ASTVisitor {
         }
 
         // TODO: check return type same?
+        if(it.body.stmt.isEmpty()) {
+            if(!it.returnType.isVoid) {
+                throw new semanticError("return type of non-void function should have return statement", it.pos);
+            }
+            currentScope.parentScope();
+            return;
+        }
         if(it.body.stmt.getLast() instanceof ReturnStmt) {
             if(it.returnType.isVoid) {
                 throw new semanticError("return type of void function should not have return statement", it.pos);
@@ -140,6 +147,7 @@ public class SemanticChecker implements ASTVisitor {
         if(!it.size.type.isInt || it.size.type.dim > 0) {
             throw new semanticError("type not match", it.pos);
         }
+        // 错误：处理 new int[1][][1]的情况，这里 new int [1][]被解释为 NewArrayExpr
         if(it.baseType instanceof NewArrayExpr) {
             throw new semanticError("type not match", it.pos);
         }
@@ -244,20 +252,31 @@ public class SemanticChecker implements ASTVisitor {
     }
     @Override public void visit(MemberExpr it) {}
     @Override public void visit(MethodCallExpr it) {
-        it.callExpList.accept(this);
-        if(it.base.type.isVoid || it.base.type.isNull) {
-            throw new semanticError("invalid caller type", it.pos);
+        // 错误：这里 base一定要 visit一下
+        it.base.accept(this);
+        if(it.callExpList != null){
+            it.callExpList.accept(this);
         }
         if(it.base.type.dim > 0) {
-            throw new semanticError("invalid caller type", it.pos);
+            if(!it.methodName.equals("size")) {
+                throw new semanticError("invalid caller type", it.pos);
+            }
+            it.type = new Type();
+            it.type.setInt();
+            it.isAssignable = false;
+            return;
         }
         if(it.base.type.isClass && !gScope.containsClass(it.base.type.typeName, true)) {
             throw new semanticError("class " + it.base.type.typeName + " not defined", it.pos);
         }
-        if(!gScope.containsFunc(it.methodName, true)) {
+        if(!it.base.type.isString && !it.base.type.isClass) {
+            throw new semanticError("invalid caller type", it.pos);
+        }
+        ClassInfor struct = gScope.getClassInfo(it.base.type.typeName);
+        if(struct.funcList.get(it.methodName) == null) {
             throw new semanticError("function " + it.methodName + " not defined", it.pos);
         }
-        FuncInfor func = gScope.getFuncInfo(it.methodName);
+        FuncInfor func = struct.funcList.get(it.methodName);
         if(it.callExpList.expList.size() != func.paraTypeList.size()) {
             throw new semanticError("parameter number not match", it.pos);
         }
@@ -266,6 +285,7 @@ public class SemanticChecker implements ASTVisitor {
                 throw new semanticError("type not match", it.pos);
             }
         }
+        it.type = new Type(func.returnType);
     }
     @Override public void visit(NewArrayExpr it) {
         if(it.baseType.isVoid || it.baseType.isNull || it.baseType.dim > 0) {

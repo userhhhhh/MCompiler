@@ -136,7 +136,13 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if (ctx == null) return null;
         FuncCallExpr functionCallExpr = new FuncCallExpr(new position(ctx));
         functionCallExpr.funcName = ctx.Identifier().getText();
-        functionCallExpr.callExpList = (ParallelExp) visit(ctx.parallelExp());
+        // 错误：要考虑参数为空的情况
+        if(ctx.parallelExp() != null){
+            functionCallExpr.callExpList = (ParallelExp) visit(ctx.parallelExp());
+        }
+        if(functionCallExpr.callExpList == null){
+            functionCallExpr.callExpList = new ParallelExp(new position(ctx));
+        }
         return functionCallExpr;
     }
 
@@ -157,8 +163,10 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         MethodCallExpr methodCallExpr = new MethodCallExpr(new position(ctx));
         methodCallExpr.base = (Expression) visit(ctx.expr());
         methodCallExpr.methodName = ctx.Identifier().getText();
-        methodCallExpr.callExpList = (ParallelExp) visit(ctx.parallelExp());
-        methodCallExpr.type = new Type(methodCallExpr.base.type);
+        if(ctx.parallelExp() != null){
+            methodCallExpr.callExpList = (ParallelExp) visit(ctx.parallelExp());
+        }
+//        methodCallExpr.type = new Type(methodCallExpr.base.type);
         return methodCallExpr;
     }
 
