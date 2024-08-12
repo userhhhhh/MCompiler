@@ -22,11 +22,13 @@ public class SemanticChecker implements ASTVisitor {
     @Override public void visit(Program it) {
         boolean mainExist = false;
         for(var def : it.defList) {
-            if(def instanceof FunctionDef) {
-                if(((FunctionDef) def).name.equals("main") && !mainExist) {
+            if(def.funcDef != null) {
+                // 错误：不能用 instanceof
+                if(def.funcDef.name.equals("main") && !mainExist) {
                     mainExist = true;
+                    continue;
                 }
-                if(((FunctionDef) def).name.equals("main") && mainExist) {
+                if(def.funcDef.name.equals("main") && mainExist) {
                     throw new semanticError("multiple definition of main function", def.pos);
                 }
             }
@@ -41,12 +43,14 @@ public class SemanticChecker implements ASTVisitor {
     }
 
     @Override public void visit(Definition it) {
-        if(it instanceof FunctionDef) {
-            it.accept(this);
-        } else if(it instanceof ClassTypeDef) {
-            it.accept(this);
-        } else if(it instanceof VariableDef) {
-            it.accept(this);
+        // 错误：不能用 instanceof
+        // 错误：it后面要加上.funcDef
+        if(it.funcDef != null) {
+            it.funcDef.accept(this);
+        } else if(it.classDef != null) {
+            it.classDef.accept(this);
+        } else if(it.variDef != null) {
+            it.variDef.accept(this);
         }
     }
 
@@ -96,25 +100,44 @@ public class SemanticChecker implements ASTVisitor {
         }
         it.body.stmt.forEach(stmt -> stmt.accept(this));
 
+        if(it.body.stmt.getLast() instanceof ReturnStmt){
+            if(!it.returnType.canAssign(((ReturnStmt) it.body.stmt.getLast()).expr.type)) {
+                throw new semanticError("return type not match", it.pos);
+            }
+        }
+
         currentScope.parentScope();
     }
 
     @Override public void visit(VariableDef it) {
+        if(it.type.isClass && !gScope.containsClass(it.type.typeName)) {
+            throw new semanticError("class " + it.type.typeName + " not defined", it.pos);
+        }
         for(var iv : it.initVariablelist) {
             iv.accept(this);
+            if(!it.type.canAssign(iv.init.type)) {
+                throw new semanticError("type not match", it.pos);
+            }
         }
     }
 
     @Override public void visit(InitVariable it) {
         if(currentScope.variInfor.containsKey(it.name))
             throw new semanticError("redefinition of variable " + it.name, it.pos);
-        if(it.type.equalType(it.init.type)) {
+        if(!it.type.equalType(it.init.type)) {
             throw new semanticError("type not match", it.pos);
         }
+        currentScope.defineVariable(it.name, it.type, it.pos);
     }
 
     @Override public void visit(ArrayExpr it) {
-        // TODO
+        it.baseType.accept(this);
+        it.size.accept(this);
+        if(!it.size.type.isInt) {
+            throw new semanticError("type not match", it.pos);
+        }
+        it.type = new Type(it.baseType.type);
+        it.type.dim = it.baseType.type.dim - 1;
     }
     @Override public void visit(AssignExpr it) {
         it.lhs.accept(this);
@@ -122,7 +145,7 @@ public class SemanticChecker implements ASTVisitor {
             throw new semanticError("left value is not assignable", it.pos);
         }
         it.rhs.accept(this);
-        if(it.lhs.type.canAssign(it.rhs.type)) {
+        if(!it.lhs.type.canAssign(it.rhs.type)) {
             throw new semanticError("type not match", it.pos);
         }
 
@@ -239,7 +262,32 @@ public class SemanticChecker implements ASTVisitor {
             throw new semanticError("type not match", it.pos);
         }
     }
-    @Override public void visit(PrimaryExpr it) {}
+    @Override public void visit(PrimaryExpr it) {
+        if(it.isIdentifier){
+            if(!currentScope.containsVariable(it.identifier) && !currentScope.containsClass(it.identifier)) {
+                throw new semanticError(it.identifier + " not defined", it.pos);
+            }
+            it.type = currentScope.getType(it.identifier);
+            it.isAssignable = true;
+        } else if(it.isThis) {
+            // TODO
+        } else if(it.isIntLiteral) {
+            it.type = new Type();
+            it.type.setInt();
+        } else if(it.isTrue || it.isFalse) {
+            it.type = new Type();
+            it.type.setBool();
+        } else if(it.isNull) {
+            it.type = new Type();
+            it.type.setNull();
+        } else if(it.isStringLiteral) {
+            it.type = new Type();
+            it.type.setString();
+        } else if(it.isFmtString) {
+            it.type = new Type();
+            it.type.setString();
+        }
+    }
     @Override public void visit(UnaryExpr it) {
         switch (it.op) {
             case "+", "-", "~", "!" -> {
@@ -289,9 +337,6 @@ public class SemanticChecker implements ASTVisitor {
     @Override public void visit(ReturnStmt it) {
         if(it.expr != null) {
             it.expr.accept(this);
-            if(!it.expr.type.equalType(currentScope.getType("return", false))) {
-                throw new semanticError("type not match", it.pos);
-            }
         }
     }
     @Override public void visit(Suite it) {
@@ -301,7 +346,6 @@ public class SemanticChecker implements ASTVisitor {
     }
     @Override public void visit(VariableDefStmt it) {
         it.variableDef.accept(this);
-        it.variableDef.initVariablelist.forEach(iv -> {iv.accept(this);});
     }
     @Override public void visit(WhileStmt it) {
         it.condition.accept(this);

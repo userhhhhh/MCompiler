@@ -17,6 +17,11 @@ public class SymbolCollector implements ASTVisitor {
         it.defList.forEach(sd -> sd.accept(this));
     }
 
+    @Override public void visit(Definition it) {
+        if(it.classDef != null) it.classDef.accept(this);
+        if(it.funcDef != null) it.funcDef.accept(this);
+    }
+
     @Override public void visit(ClassTypeDef it) {
         ClassInfor struct = new ClassInfor(it);
         gScope.addClassInfo(it.name, struct, it.pos);
@@ -27,7 +32,6 @@ public class SymbolCollector implements ASTVisitor {
         gScope.addFuncInfo(it.name, func, it.pos);
     }
 
-    @Override public void visit(Definition it) {}
     @Override public void visit(VariableDef it) {}
     @Override public void visit(InitVariable it) {}
 

@@ -98,6 +98,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         ArrayExpr arrayExpr = new ArrayExpr(new position(ctx));
         arrayExpr.baseType = (Expression) visit(ctx.expr(0));
         arrayExpr.size = (Expression) visit(ctx.expr(1));
+        arrayExpr.isAssignable = true;
         return arrayExpr;
     }
 
@@ -145,6 +146,8 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         MemberExpr memberExpr = new MemberExpr(new position(ctx));
         memberExpr.base = (Expression) visit(ctx.expr());
         memberExpr.memberName = ctx.Identifier().getText();
+        memberExpr.type = new Type(memberExpr.base.type);
+        memberExpr.isAssignable = true;
         return memberExpr;
     }
 
@@ -155,6 +158,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         methodCallExpr.base = (Expression) visit(ctx.expr());
         methodCallExpr.methodName = ctx.Identifier().getText();
         methodCallExpr.callExpList = (ParallelExp) visit(ctx.parallelExp());
+        methodCallExpr.type = new Type(methodCallExpr.base.type);
         return methodCallExpr;
     }
 
@@ -162,9 +166,14 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
     public ASTNode visitNewArrayExpr(MxParser.NewArrayExprContext ctx) {
         if (ctx == null) return null;
         NewArrayExpr newArrayExpr = new NewArrayExpr(new position(ctx));
-        newArrayExpr.baseType = visitType(ctx.typeName());
+        newArrayExpr.baseType = visitAtomType(ctx.typeAtom());
+        newArrayExpr.dim = ctx.count.size();
+        if(ctx.expr() != null) {
+            ctx.expr().forEach(e -> newArrayExpr.size.add((Expression) visit(e)));
+        }
+        newArrayExpr.type = new Type(newArrayExpr.baseType);
+        newArrayExpr.type.dim = newArrayExpr.dim;
         // TODO
-//        ctx.expr().forEach(e -> newArrayExpr.exprList.add((Expression) visit(e)));
         return newArrayExpr;
     }
 
@@ -172,7 +181,8 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
     public ASTNode visitNewVarExpr(MxParser.NewVarExprContext ctx) {
         if (ctx == null) return null;
         NewVarExpr newVarExpr = new NewVarExpr(new position(ctx));
-        newVarExpr.varName = ctx.typeName().getText();
+        newVarExpr.varName = ctx.typeAtom().getText();
+        newVarExpr.type = visitAtomType(ctx.typeAtom());
         return newVarExpr;
     }
 
@@ -189,6 +199,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if (ctx == null) return null;
         ParenExpr parenExpr = new ParenExpr(new position(ctx));
         parenExpr.expr = (Expression) visit(ctx.expr());
+        parenExpr.type = new Type(parenExpr.expr.type);
         return parenExpr;
     }
 
@@ -198,6 +209,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         PostfixExpr postfixExpr = new PostfixExpr(new position(ctx));
         postfixExpr.op = ctx.op.getText();
         postfixExpr.expr = (Expression) visit(ctx.expr());
+        postfixExpr.type = new Type(postfixExpr.expr.type);
         return postfixExpr;
     }
 
@@ -207,6 +219,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         PrefixExpr prefixExpr = new PrefixExpr(new position(ctx));
         prefixExpr.op = ctx.op.getText();
         prefixExpr.expr = (Expression) visit(ctx.expr());
+        prefixExpr.type = new Type(prefixExpr.expr.type);
         return prefixExpr;
     }
 
@@ -214,26 +227,37 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
     public ASTNode visitPrimaryExpr(MxParser.PrimaryExprContext ctx) {
         if (ctx == null) return null;
         PrimaryExpr primaryExpr = new PrimaryExpr(new position(ctx));
+        primaryExpr.type = new Type();
         if (ctx.primary().Identifier() != null) {
             primaryExpr.isIdentifier = true;
             primaryExpr.identifier = ctx.primary().Identifier().getText();
+            primaryExpr.type.setClass(primaryExpr.identifier);
+            // TODO
+            primaryExpr.isAssignable = true;
         } else if (ctx.primary().This() != null) {
             primaryExpr.isThis = true;
+            primaryExpr.type.setClass("this");
         } else if (ctx.primary().Null() != null) {
             primaryExpr.isNull = true;
+            primaryExpr.type.setNull();
         } else if (ctx.primary().True() != null) {
             primaryExpr.isTrue = true;
+            primaryExpr.type.setBool();
         } else if (ctx.primary().False() != null) {
             primaryExpr.isFalse = true;
+            primaryExpr.type.setBool();
         } else if (ctx.primary().IntLiteral() != null) {
             primaryExpr.isIntLiteral = true;
             primaryExpr.intLiteral = ctx.primary().IntLiteral().getText();
+            primaryExpr.type.setInt();
         } else if (ctx.primary().StringLiteral() != null) {
             primaryExpr.isStringLiteral = true;
             primaryExpr.stringLiteral = ctx.primary().StringLiteral().getText();
+            primaryExpr.type.setString();
         } else if (ctx.primary().fmtString() != null) {
             primaryExpr.isFmtString = true;
             primaryExpr.fmtString = ctx.primary().fmtString().getText();
+            primaryExpr.type.setString();
         } else {
             throw new RuntimeException("Unknown primary expression");
         }
@@ -337,6 +361,30 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
     public Type visitType(MxParser.TypeNameContext ctx) {
         if (ctx == null) return null;
         Type type = new Type();
+        if(ctx.dim() != null) {
+            type.dim = ctx.dim().size();
+        }
+        if (ctx.Bool() != null) {
+            type.setBool();
+        } else if (ctx.Int() != null) {
+            type.setInt();
+        } else if (ctx.String() != null) {
+            type.setString();
+        } else if (ctx.Void() != null) {
+            type.setVoid();
+        } else if (ctx.Identifier() != null) {
+            type.setClass(ctx.Identifier().getText());
+        } else if (ctx.typeAtom() != null) {
+            type.setArray(visitAtomType(ctx.typeAtom()));
+        } else {
+            throw new RuntimeException("Unknown type");
+        }
+        return type;
+    }
+
+    public Type visitAtomType(MxParser.TypeAtomContext ctx) {
+        if (ctx == null) return null;
+        Type type = new Type();
         if (ctx.Bool() != null) {
             type.setBool();
         } else if (ctx.Int() != null) {
@@ -348,11 +396,8 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         } else if (ctx.Identifier() != null) {
             type.setClass(ctx.Identifier().getText());
         } else {
-            type = visitType(ctx.typeName());
-            type.setDim(ctx.dim().size());
+            throw new RuntimeException("Unknown type");
         }
         return type;
     }
-
-
 }
