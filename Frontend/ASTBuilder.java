@@ -307,7 +307,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
             forStmt.conditionExp = (Expression) visit(ctx.expr(0));
             forStmt.stepExp = (Expression) visit(ctx.expr(1));
         }
-        forStmt.stmt = (Suite) visit(ctx.statement());
+        forStmt.stmt = (StmtNode) visit(ctx.statement());
         return forStmt;
     }
 
