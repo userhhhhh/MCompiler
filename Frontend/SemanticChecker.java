@@ -77,6 +77,9 @@ public class SemanticChecker implements ASTVisitor {
         if(it.name.equals("main") && !it.parameters.isEmpty()) {
             throw new semanticError("main function should not have parameters", it.pos);
         }
+        if(it.name.equals("main") && !it.returnType.isInt) {
+            throw new semanticError("main function should return int", it.pos);
+        }
         for(int i = 0; i < it.parameters.size(); i++) {
             if(it.parameters.get(i).isClass && !gScope.containsClass(it.parameters.get(i).typeName, true)) {
                 throw new semanticError("parameter type " + it.parameters.get(i).typeName + " not defined", it.pos);
@@ -90,14 +93,15 @@ public class SemanticChecker implements ASTVisitor {
 
         // TODO: check return type same?
         if(it.body.stmt.isEmpty()) {
-            if(!it.returnType.isVoid) {
+            if(!it.returnType.isVoid && !it.name.equals("main")) {
                 throw new semanticError("return type of non-void function should have return statement", it.pos);
             }
             currentScope.parentScope();
             return;
         }
         if(it.body.stmt.getLast() instanceof ReturnStmt) {
-            if(it.returnType.isVoid) {
+            // 错误：要考虑到 return的情况
+            if(it.returnType.isVoid && ((ReturnStmt) it.body.stmt.getLast()).expr != null) {
                 throw new semanticError("return type of void function should not have return statement", it.pos);
             }
         } else {
@@ -107,7 +111,7 @@ public class SemanticChecker implements ASTVisitor {
         }
         it.body.stmt.forEach(stmt -> stmt.accept(this));
 
-        if(it.body.stmt.getLast() instanceof ReturnStmt){
+        if(it.body.stmt.getLast() instanceof ReturnStmt && ((ReturnStmt) it.body.stmt.getLast()).expr != null) {
             if(!it.returnType.canAssign(((ReturnStmt) it.body.stmt.getLast()).expr.type)) {
                 throw new semanticError("return type not match", it.pos);
             }
@@ -254,6 +258,7 @@ public class SemanticChecker implements ASTVisitor {
     @Override public void visit(MethodCallExpr it) {
         // 错误：这里 base一定要 visit一下
         it.base.accept(this);
+        // 错误：要判断 it.callExpList != null
         if(it.callExpList != null){
             it.callExpList.accept(this);
         }
@@ -277,12 +282,14 @@ public class SemanticChecker implements ASTVisitor {
             throw new semanticError("function " + it.methodName + " not defined", it.pos);
         }
         FuncInfor func = struct.funcList.get(it.methodName);
-        if(it.callExpList.expList.size() != func.paraTypeList.size()) {
-            throw new semanticError("parameter number not match", it.pos);
-        }
-        for(int i = 0; i < it.callExpList.expList.size(); i++) {
-            if(!it.callExpList.expList.get(i).type.equalType(func.paraTypeList.get(i))) {
-                throw new semanticError("type not match", it.pos);
+        if(it.callExpList != null){
+            if(it.callExpList.expList.size() != func.paraTypeList.size()) {
+                throw new semanticError("parameter number not match", it.pos);
+            }
+            for(int i = 0; i < it.callExpList.expList.size(); i++) {
+                if(!it.callExpList.expList.get(i).type.equalType(func.paraTypeList.get(i))) {
+                    throw new semanticError("type not match", it.pos);
+                }
             }
         }
         it.type = new Type(func.returnType);
@@ -313,7 +320,10 @@ public class SemanticChecker implements ASTVisitor {
         }
         currentScope.defineVariable(it.varName, it.type, it.pos);
     }
-    @Override public void visit(ParallelExp it) {}
+    @Override public void visit(ParallelExp it) {
+        // 错误：这里不能为空，要visit一下，比如 println(s2.substring(0, getInt()));中的 getInt()
+        it.expList.forEach(e -> e.accept(this));
+    }
     @Override public void visit(ParenExpr it) {}
     @Override public void visit(PostfixExpr it) {
         it.expr.accept(this);

@@ -68,6 +68,9 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if (ctx == null) return null;
         VariableDef varDef = new VariableDef(new position(ctx));
         varDef.type = visitType(ctx.typeName());
+        if(varDef.type.isVoid) {
+            throw new RuntimeException("Variable cannot be void");
+        }
         ctx.initVariable().forEach(iv -> varDef.initVariablelist.add((InitVariable) visit(iv)));
         varDef.initVariablelist.forEach(iv -> iv.type = varDef.type);
         return varDef;
