@@ -10,6 +10,8 @@ import Util.error.semanticError;
 import Util.infor.ClassInfor;
 import Util.infor.FuncInfor;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 public class SemanticChecker implements ASTVisitor {
 
     private Scope gScope;
@@ -63,7 +65,8 @@ public class SemanticChecker implements ASTVisitor {
         it.funcList.forEach(fd -> fd.accept(this));
         // TODO: not sure，构造函数没写
 
-        currentScope.parentScope();
+        // 错误：要将当前的scope改为parentScope
+        currentScope = currentScope.parentScope();
     }
 
     @Override public void visit(FunctionDef it) {
@@ -89,35 +92,50 @@ public class SemanticChecker implements ASTVisitor {
                     throw new semanticError("redefinition of parameter " + it.parameterNames.get(i), it.pos);
                 }
             }
+            // 错误：要将参数加入到当前的scope中
+            if(currentScope.variInfor.containsKey(it.parameterNames.get(i))) {
+                throw new semanticError("redefinition of variable " + it.parameterNames.get(i), it.pos);
+            }
+            if(currentScope.funcInfor.containsKey(it.parameterNames.get(i))) {
+                throw new semanticError("redefinition of function " + it.parameterNames.get(i), it.pos);
+            }
+            currentScope.defineVariable(it.parameterNames.get(i), it.parameters.get(i), it.pos);
         }
 
-        // TODO: check return type same?
         if(it.body.stmt.isEmpty()) {
             if(!it.returnType.isVoid && !it.name.equals("main")) {
                 throw new semanticError("return type of non-void function should have return statement", it.pos);
             }
-            currentScope.parentScope();
+            currentScope = currentScope.parentScope();
             return;
         }
-        if(it.body.stmt.getLast() instanceof ReturnStmt) {
-            // 错误：要考虑到 return的情况
-            if(it.returnType.isVoid && ((ReturnStmt) it.body.stmt.getLast()).expr != null) {
-                throw new semanticError("return type of void function should not have return statement", it.pos);
-            }
-        } else {
-            if(!it.returnType.isVoid && !it.name.equals("main")) {
-                throw new semanticError("return type of non-void function should have return statement", it.pos);
-            }
-        }
-        it.body.stmt.forEach(stmt -> stmt.accept(this));
 
-        if(it.body.stmt.getLast() instanceof ReturnStmt && ((ReturnStmt) it.body.stmt.getLast()).expr != null) {
-            if(!it.returnType.canAssign(((ReturnStmt) it.body.stmt.getLast()).expr.type)) {
-                throw new semanticError("return type not match", it.pos);
+        AtomicBoolean hasReturn = new AtomicBoolean(false);
+        it.body.stmt.forEach(stmt -> {
+            stmt.accept(this);
+            if (stmt instanceof ReturnStmt) {
+                // 错误：要考虑到 return的情况
+                if(((ReturnStmt) stmt).expr == null) {
+                    if(!it.returnType.isVoid) {
+                        throw new semanticError("return type not match", it.pos);
+                    }
+                }
+                if(((ReturnStmt) stmt).expr != null) {
+                    if(it.returnType.isVoid) {
+                        throw new semanticError("return type of void function should not have return statement", it.pos);
+                    }
+                    if(!it.returnType.canAssign(((ReturnStmt) stmt).expr.type)) {
+                        throw new semanticError("return type not match", it.pos);
+                    }
+                }
+                hasReturn.set(true);
             }
+        });
+        if(!hasReturn.get() && !it.returnType.isVoid && !it.name.equals("main")) {
+            throw new semanticError("return type of non-void function should have return statement", it.pos);
         }
 
-        currentScope.parentScope();
+        currentScope = currentScope.parentScope();
     }
 
     @Override public void visit(VariableDef it) {
@@ -141,6 +159,12 @@ public class SemanticChecker implements ASTVisitor {
             if(!it.type.canAssign(it.init.type)) {
                 throw new semanticError("type not match", it.pos);
             }
+        }
+        if(currentScope.variInfor.containsKey(it.name)) {
+            throw new semanticError("redefinition of variable " + it.name, it.pos);
+        }
+        if(currentScope.funcInfor.containsKey(it.name)) {
+            throw new semanticError("redefinition of function " + it.name, it.pos);
         }
         currentScope.defineVariable(it.name, it.type, it.pos);
     }
@@ -318,6 +342,12 @@ public class SemanticChecker implements ASTVisitor {
         if(it.type.isClass && !gScope.containsClass(it.type.typeName, true)) {
             throw new semanticError("class " + it.type.typeName + " not defined", it.pos);
         }
+        if(currentScope.variInfor.containsKey(it.varName)) {
+            throw new semanticError("redefinition of variable " + it.varName, it.pos);
+        }
+        if(currentScope.funcInfor.containsKey(it.varName)) {
+            throw new semanticError("redefinition of function " + it.varName, it.pos);
+        }
         currentScope.defineVariable(it.varName, it.type, it.pos);
     }
     @Override public void visit(ParallelExp it) {
@@ -339,10 +369,20 @@ public class SemanticChecker implements ASTVisitor {
     }
     @Override public void visit(PrimaryExpr it) {
         if(it.isIdentifier){
-            if(!currentScope.containsVariable(it.identifier, true) && !currentScope.containsClass(it.identifier, true)) {
+//            if(!currentScope.containsVariable(it.identifier, true) && !gScope.containsClass(it.identifier, true)) {
+//                throw new semanticError(it.identifier + " not defined", it.pos);
+//            }
+            if(currentScope.containsVariable(it.identifier, true)) {
+                it.type = currentScope.getType(it.identifier, true);
+            } else if(gScope.containsClass(it.identifier, true)) {
+                it.type = gScope.getType(it.identifier, true);
+            }
+//            else if(currentScope.containsFunc(it.identifier, true)) {
+//                it.type = currentScope.getType(it.identifier, true);
+//            }
+            else {
                 throw new semanticError(it.identifier + " not defined", it.pos);
             }
-            it.type = currentScope.getType(it.identifier, true);
             it.isAssignable = true;
         } else if(it.isThis) {
             // TODO
