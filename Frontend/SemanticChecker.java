@@ -17,6 +17,8 @@ public class SemanticChecker implements ASTVisitor {
     private Scope gScope;
     private Scope currentScope;
 
+    public String currentClassName = null;
+
     public SemanticChecker(Scope gScope) {
         currentScope = this.gScope = gScope;
     }
@@ -60,13 +62,15 @@ public class SemanticChecker implements ASTVisitor {
         currentScope = new Scope(currentScope);
         ClassInfor struct = new ClassInfor(it);
         currentScope.addClassInfo(it.name, struct, it.pos);
+        currentClassName = it.name;
 
         it.varList.forEach(vd -> vd.accept(this));
         it.funcList.forEach(fd -> fd.accept(this));
         // TODO: not sure，构造函数没写
 
-        // 错误：要将当前的scope改为parentScope
+        // 错误：要将当前的scope改为 parentScope
         currentScope = currentScope.parentScope();
+        currentClassName = null;
     }
 
     @Override public void visit(FunctionDef it) {
@@ -99,7 +103,7 @@ public class SemanticChecker implements ASTVisitor {
             if(currentScope.funcInfor.containsKey(it.parameterNames.get(i))) {
                 throw new semanticError("redefinition of function " + it.parameterNames.get(i), it.pos);
             }
-            currentScope.defineVariable(it.parameterNames.get(i), it.parameters.get(i), it.pos);
+            currentScope.defineVariable(it.parameterNames.get(i), it.parameters.get(i), it.pos, false);
         }
 
         if(it.body.stmt.isEmpty()) {
@@ -166,7 +170,7 @@ public class SemanticChecker implements ASTVisitor {
         if(currentScope.funcInfor.containsKey(it.name)) {
             throw new semanticError("redefinition of function " + it.name, it.pos);
         }
-        currentScope.defineVariable(it.name, it.type, it.pos);
+        currentScope.defineVariable(it.name, it.type, it.pos, true);
     }
 
     @Override public void visit(ArrayExpr it) {
@@ -278,7 +282,21 @@ public class SemanticChecker implements ASTVisitor {
         }
         it.type = new Type(func.returnType);
     }
-    @Override public void visit(MemberExpr it) {}
+    @Override public void visit(MemberExpr it) {
+        it.base.accept(this);
+        if(!it.base.type.isClass) {
+            throw new semanticError("invalid caller type", it.pos);
+        }
+        if(!gScope.containsClass(it.base.type.typeName, true)) {
+            throw new semanticError("class " + it.base.type.typeName + " not defined", it.pos);
+        }
+        ClassInfor struct = gScope.getClassInfo(it.base.type.typeName);
+        if(struct.variList.get(it.memberName) == null) {
+            throw new semanticError("variable " + it.memberName + " not defined", it.pos);
+        }
+        it.type = new Type(struct.variList.get(it.memberName));
+        it.isAssignable = true;
+    }
     @Override public void visit(MethodCallExpr it) {
         // 错误：这里 base一定要 visit一下
         it.base.accept(this);
@@ -348,7 +366,7 @@ public class SemanticChecker implements ASTVisitor {
         if(currentScope.funcInfor.containsKey(it.varName)) {
             throw new semanticError("redefinition of function " + it.varName, it.pos);
         }
-        currentScope.defineVariable(it.varName, it.type, it.pos);
+        currentScope.defineVariable(it.varName, it.type, it.pos, true);
     }
     @Override public void visit(ParallelExp it) {
         // 错误：这里不能为空，要visit一下，比如 println(s2.substring(0, getInt()));中的 getInt()
@@ -369,23 +387,21 @@ public class SemanticChecker implements ASTVisitor {
     }
     @Override public void visit(PrimaryExpr it) {
         if(it.isIdentifier){
-//            if(!currentScope.containsVariable(it.identifier, true) && !gScope.containsClass(it.identifier, true)) {
-//                throw new semanticError(it.identifier + " not defined", it.pos);
-//            }
             if(currentScope.containsVariable(it.identifier, true)) {
                 it.type = currentScope.getType(it.identifier, true);
             } else if(gScope.containsClass(it.identifier, true)) {
                 it.type = gScope.getType(it.identifier, true);
-            }
-//            else if(currentScope.containsFunc(it.identifier, true)) {
-//                it.type = currentScope.getType(it.identifier, true);
-//            }
-            else {
+            } else {
                 throw new semanticError(it.identifier + " not defined", it.pos);
             }
             it.isAssignable = true;
         } else if(it.isThis) {
-            // TODO
+            if(currentClassName == null) {
+                throw new semanticError("this should be in class", it.pos);
+            }
+            it.type = new Type();
+            it.type.setClass(currentClassName);
+            it.isAssignable = true;
         } else if(it.isIntLiteral) {
             it.type = new Type();
             it.type.setInt();
