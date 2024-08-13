@@ -102,6 +102,9 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         arrayExpr.baseType = (Expression) visit(ctx.expr(0));
         arrayExpr.size = (Expression) visit(ctx.expr(1));
         arrayExpr.isAssignable = true;
+        // 错误：这里要更新 type
+//        arrayExpr.type = new Type(arrayExpr.baseType.type);
+//        arrayExpr.type.dim = arrayExpr.baseType.type.dim + 1;
         return arrayExpr;
     }
 
@@ -155,7 +158,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         MemberExpr memberExpr = new MemberExpr(new position(ctx));
         memberExpr.base = (Expression) visit(ctx.expr());
         memberExpr.memberName = ctx.Identifier().getText();
-        memberExpr.type = new Type(memberExpr.base.type);
+//        memberExpr.type = new Type(memberExpr.base.type);
         memberExpr.isAssignable = true;
         return memberExpr;
     }
@@ -209,7 +212,7 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if (ctx == null) return null;
         ParenExpr parenExpr = new ParenExpr(new position(ctx));
         parenExpr.expr = (Expression) visit(ctx.expr());
-        parenExpr.type = new Type(parenExpr.expr.type);
+        parenExpr.isAssignable = parenExpr.expr.isAssignable;
         return parenExpr;
     }
 
@@ -219,6 +222,9 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         PostfixExpr postfixExpr = new PostfixExpr(new position(ctx));
         postfixExpr.op = ctx.op.getText();
         postfixExpr.expr = (Expression) visit(ctx.expr());
+        if(!postfixExpr.expr.isAssignable){
+            throw new RuntimeException("Postfix expression is not assignable");
+        }
         postfixExpr.type = new Type();
         postfixExpr.type.setInt();
         return postfixExpr;
@@ -230,8 +236,12 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         PrefixExpr prefixExpr = new PrefixExpr(new position(ctx));
         prefixExpr.op = ctx.op.getText();
         prefixExpr.expr = (Expression) visit(ctx.expr());
+        if(!prefixExpr.expr.isAssignable){
+            throw new RuntimeException("Prefix expression is not assignable");
+        }
         prefixExpr.type = new Type();
         prefixExpr.type.setInt();
+        prefixExpr.isAssignable = true;
         return prefixExpr;
     }
 
@@ -315,9 +325,12 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
             forStmt.parallelExp = (ParallelExp) visit(ctx.parallelExp());
         } else if (ctx.variableDef() != null) {
             forStmt.variableDef = (VariableDef) visit(ctx.variableDef());
-        } else if (ctx.expr() != null) {
-            forStmt.conditionExp = (Expression) visit(ctx.expr(0));
-            forStmt.stepExp = (Expression) visit(ctx.expr(1));
+        }
+        if (ctx.condition != null) {
+            forStmt.conditionExp = (Expression) visit(ctx.condition);
+        }
+        if (ctx.step != null) {
+            forStmt.stepExp = (Expression) visit(ctx.step);
         }
         forStmt.stmt = (StmtNode) visit(ctx.statement());
         return forStmt;
