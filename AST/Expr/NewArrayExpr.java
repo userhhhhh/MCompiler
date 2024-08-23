@@ -1,19 +1,18 @@
 package AST.Expr;
 
-import Util.Type;
+import Util.type.Type;
 import AST.ASTVisitor;
 import Util.position;
 import java.util.ArrayList;
-import AST.Literal;
 
 public class NewArrayExpr extends Expression {
     public Type baseType;
-    public ArrayList<Expression> size;
-    public int dim;
-    public ArrayList<Literal> literal;
+    public ArrayList<Expression> size = new ArrayList<>();
+    public Arrayconst arrayconst = null;
 
     public NewArrayExpr(position pos) {
         super(pos);
+        isAssignable = true;
     }
 
     @Override

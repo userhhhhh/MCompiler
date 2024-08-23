@@ -8,7 +8,7 @@ import AST.Expr.*;
 import AST.Stmt.*;
 import parser.MxBaseVisitor;
 import parser.MxParser;
-import Util.Type;
+import Util.type.Type;
 import Util.Scope;
 import Util.position;
 
@@ -48,7 +48,19 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         classDef.name = ctx.Identifier().toString();
         ctx.variableDef().forEach(vd -> classDef.varList.add((VariableDef) visit(vd)));
         ctx.functionDef().forEach(fd -> classDef.funcList.add((FunctionDef) visit(fd)));
+        if(ctx.constructor() != null){
+            classDef.constructor = (Constructor) visit(ctx.constructor());
+        }
         return classDef;
+    }
+
+    @Override
+    public ASTNode visitConstructor(MxParser.ConstructorContext ctx) {
+        if (ctx == null) return null;
+        Constructor constructor = new Constructor(new position(ctx));
+        constructor.className = ctx.Identifier().toString();
+        constructor.suite = (Suite) visit(ctx.suite());
+        return constructor;
     }
 
     @Override
@@ -184,10 +196,63 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if(ctx.expr() != null) {
             ctx.expr().forEach(e -> newArrayExpr.size.add((Expression) visit(e)));
         }
+        if(ctx.arrayConst() != null) {
+            newArrayExpr.arrayconst = (Arrayconst) visit(ctx.arrayConst());
+        }
         newArrayExpr.type = new Type(newArrayExpr.baseType);
         newArrayExpr.type.dim = ctx.count.size();
-        // TODO
         return newArrayExpr;
+    }
+
+    @Override
+    public ASTNode visitArrayConst(MxParser.ArrayConstContext ctx) {
+        if (ctx == null) return null;
+        Arrayconst arrayconst = new Arrayconst(new position(ctx));
+        ctx.literal().forEach(l -> arrayconst.literal.add((Literal) visit(l)));
+        if(!arrayconst.literal.isEmpty()){
+            arrayconst.type = new Type(arrayconst.literal.getFirst().type);
+            arrayconst.type.dim = arrayconst.literal.getFirst().type.dim + 1;
+        } else {
+            arrayconst.type = new Type();
+            arrayconst.type.setNull();
+        }
+        return arrayconst;
+    }
+
+    @Override
+    public ASTNode visitLiteral(MxParser.LiteralContext ctx) {
+        if (ctx == null) return null;
+        Literal literal = new Literal(new position(ctx));
+        if (ctx.StringLiteral() != null) {
+            literal.isString = true;
+            literal.stringValue = ctx.StringLiteral().getText();
+            literal.type = new Type();
+            literal.type.setString();
+        } else if (ctx.IntLiteral() != null) {
+            literal.isInt = true;
+            literal.intValue = Integer.parseInt(ctx.IntLiteral().getText());
+            literal.type = new Type();
+            literal.type.setInt();
+        } else if (ctx.True() != null) {
+            literal.isTrue = true;
+            literal.type = new Type();
+            literal.type.setBool();
+        } else if (ctx.False() != null) {
+            literal.isFalse = true;
+            literal.type = new Type();
+            literal.type.setBool();
+        } else if (ctx.Null() != null) {
+            literal.isNull = true;
+            literal.type = new Type();
+            literal.type.setNull();
+        } else if (ctx.arrayConst() != null) {
+            literal.isArrayConst = true;
+            literal.arrayconst = (Arrayconst) visit(ctx.arrayConst());
+            literal.type = new Type(literal.arrayconst.type);
+        } else {
+            throw new RuntimeException("Unknown literal");
+        }
+        return literal;
     }
 
     @Override
@@ -254,7 +319,6 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
             primaryExpr.isIdentifier = true;
             primaryExpr.identifier = ctx.primary().Identifier().getText();
             primaryExpr.type.setClass(primaryExpr.identifier);
-            // TODO
             primaryExpr.isAssignable = true;
         } else if (ctx.primary().This() != null) {
             primaryExpr.isThis = true;
@@ -278,12 +342,48 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
             primaryExpr.type.setString();
         } else if (ctx.primary().fmtString() != null) {
             primaryExpr.isFmtString = true;
-            primaryExpr.fmtString = ctx.primary().fmtString().getText();
+            primaryExpr.fmtString = (FmtString) visit(ctx.primary().fmtString());
             primaryExpr.type.setString();
-        } else {
+        } else if (ctx.primary().literal() != null) {
+            primaryExpr.isLiteral = true;
+            primaryExpr.literal = (Literal) visit(ctx.primary().literal());
+            primaryExpr.type = new Type(primaryExpr.literal.type);
+        }
+        else {
             throw new RuntimeException("Unknown primary expression");
         }
         return primaryExpr;
+    }
+
+    @Override
+    public ASTNode visitFmtString(MxParser.FmtStringContext ctx) {
+        if (ctx == null) return null;
+        FmtString fmtString = new FmtString(new position(ctx));
+        if(ctx.FmtStringS() != null){
+            if(ctx.FmtStringL() != null || ctx.FmtStringM() != null || ctx.FmtStringR() != null){
+                throw new RuntimeException("Invalid fmt string");
+            }
+            if(!ctx.expr().isEmpty()){
+                throw new RuntimeException("Invalid fmt string");
+            }
+            String s = ctx.FmtStringS().getText();
+            fmtString.stringList.add(s.substring(1, s.length() - 1));
+        } else {
+            String stringL = ctx.FmtStringL().getText();
+            fmtString.stringList.add(stringL.substring(1, stringL.length() - 1));
+            if(ctx.FmtStringM() != null){
+                ctx.FmtStringM().forEach(m -> {
+                    String stringM = m.getText();
+                    fmtString.stringList.add(stringM.substring(1, stringM.length() - 1));
+                });
+            }
+            String stringR = ctx.FmtStringR().getText();
+            fmtString.stringList.add(stringR.substring(1, stringR.length() - 1));
+            ctx.expr().forEach(e -> fmtString.exprList.add((Expression) visit(e)));
+        }
+        fmtString.type = new Type();
+        fmtString.type.setString();
+        return fmtString;
     }
 
     @Override
@@ -380,8 +480,15 @@ public class ASTBuilder extends MxBaseVisitor<ASTNode> {
         if (ctx == null) return null;
         WhileStmt whileStmt = new WhileStmt(new position(ctx));
         whileStmt.condition = (Expression) visit(ctx.expr());
-        whileStmt.body = (Suite) visit(ctx.statement());
+        whileStmt.body = (StmtNode) visit(ctx.statement());
         return whileStmt;
+    }
+
+    @Override
+    public ASTNode visitEmptyStmt(MxParser.EmptyStmtContext ctx) {
+        if (ctx == null) return null;
+        EmptyStmt emptyStmt = new EmptyStmt(new position(ctx));
+        return emptyStmt;
     }
 
     public Type visitType(MxParser.TypeNameContext ctx) {

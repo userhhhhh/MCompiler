@@ -8,6 +8,7 @@ public class NewVarExpr extends Expression {
 
     public NewVarExpr(position pos) {
         super(pos);
+        isAssignable = true;
     }
 
     @Override

@@ -24,6 +24,11 @@ public class SymbolCollector implements ASTVisitor {
 
     @Override public void visit(ClassTypeDef it) {
         ClassInfor struct = new ClassInfor(it);
+        it.varList.forEach(vd ->{
+            vd.initVariablelist.forEach(iv -> {
+                struct.varNames.add(iv.name);
+            });
+        });
         if(gScope.funcInfor.containsKey(it.name))
             throw new Util.error.semanticError("class name conflict with function name", it.pos);
         gScope.addClassInfo(it.name, struct, it.pos);
@@ -31,14 +36,18 @@ public class SymbolCollector implements ASTVisitor {
 
     @Override public void visit(FunctionDef it) {
         FuncInfor func = new FuncInfor(it);
-        if(gScope.classInfor.containsKey(it.name))
+        if(gScope.classInfor.containsKey(it.name)){
+            System.out.println("Multiple Definitions");
             throw new Util.error.semanticError("function name conflict with class name", it.pos);
+        }
         gScope.addFuncInfo(it.name, func, it.pos);
     }
 
     @Override public void visit(VariableDef it) {}
     @Override public void visit(InitVariable it) {}
+    @Override public void visit(Constructor it) {}
 
+    @Override public void visit(Arrayconst it) {}
     @Override public void visit(ArrayExpr it) {}
     @Override public void visit(AssignExpr it) {}
     @Override public void visit(BinaryExpr it) {}
@@ -55,6 +64,8 @@ public class SymbolCollector implements ASTVisitor {
     @Override public void visit(PrefixExpr it) {}
     @Override public void visit(PrimaryExpr it) {}
     @Override public void visit(UnaryExpr it) {}
+    @Override public void visit(Literal it) {}
+    @Override public void visit(FmtString it) {}
 
     @Override public void visit(BreakStmt it) {}
     @Override public void visit(ContinueStmt it) {}
@@ -65,5 +76,6 @@ public class SymbolCollector implements ASTVisitor {
     @Override public void visit(Suite it) {}
     @Override public void visit(VariableDefStmt it) {}
     @Override public void visit(WhileStmt it) {}
+    @Override public void visit(EmptyStmt it) {}
 }
 
