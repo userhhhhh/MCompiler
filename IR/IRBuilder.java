@@ -60,9 +60,14 @@ public class IRBuilder implements ASTVisitor {
     }
 
     @Override public void visit(Program it) {
+        IRFuncDef irFuncDef = new IRFuncDef(new IRType("void"), "__init", new ArrayList<>(), new ArrayList<>());
+        irFuncDef.addBlock(new IRBlock(irFuncDef, "entry"));
+        irProgram.funcDefMap.put("__init", irFuncDef);
         for(var def : it.defList) {
             def.accept(this);
         }
+        currentBlock = irFuncDef.blockList.getFirst();
+        currentBlock.instructions.add(new RetInstr(currentBlock, null, new IRType("void")));
     }
 
     @Override public void visit(Definition it) {
@@ -82,11 +87,13 @@ public class IRBuilder implements ASTVisitor {
 
         IRClassDef irClassDef = new IRClassDef(it.name);
         irProgram.classDefMap.put(it.name, irClassDef);
-        irClassDef.classSize = it.varList.size() * 4;
         it.varList.forEach(vd -> {
-            vd.accept(this);
-            irClassDef.variableDefList.add(vd);
+            vd.initVariablelist.forEach(iv -> {
+                irClassDef.variableTypeList.add(Type_To_IRType(iv.type));
+                irClassDef.memberNameList.add(iv.name);
+            });
         });
+        irClassDef.classSize = irClassDef.variableTypeList.size() * 4;
         it.funcList.forEach(fd -> fd.accept(this));
         if(it.constructor != null) {
             it.constructor.accept(this);
@@ -119,6 +126,25 @@ public class IRBuilder implements ASTVisitor {
         }
         currentBlock = irFuncDef.addBlock(new IRBlock(irFuncDef, "entry"));
         currentReNamer = new ReNamer(currentReNamer);
+        if(it.name.equals("main")) {
+            currentBlock.instructions.add(new CallInstr(currentBlock, "__init", new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("void"))));
+        }
+        it.parameters.forEach(p -> irFuncDef.parameterTypeList.add(Type_To_IRType(p)));
+        // 错误：如果传入i32类型的x，那么在函数体的开头应该包含：
+        // %x.addr = alloca i32
+        // store i32 %x, ptr %x.addr
+        for(int i = 0; i < it.parameterNames.size(); ++i){
+            String pn = it.parameterNames.get(i);
+            currentReNamer.addVar(pn);
+            int num = currentReNamer.getVarNum(pn, false);
+            String nameAddr = "%" + pn + "." + num;
+            String name = "%" + pn;
+            irFuncDef.parameterNameList.add(name);
+            IRVariable addr = new IRVariable(nameAddr, new IRType("ptr"));
+            IRVariable variable = new IRVariable(name, Type_To_IRType(it.parameters.get(i)));
+            currentBlock.instructions.add(new AllocInstr(currentBlock, irFuncDef.parameterTypeList.get(i), addr));
+            currentBlock.instructions.add(new StoreInstr(currentBlock, addr, irFuncDef.parameterTypeList.get(i), variable));
+        }
         it.body.stmt.forEach(stmt -> stmt.accept(this));
         boolean hasReturn = false;
         for(int i = 0; i < it.body.stmt.size(); i++) {
@@ -146,110 +172,179 @@ public class IRBuilder implements ASTVisitor {
     }
 
     @Override public void visit(InitVariable it) {
-        if(it.init != null) {
-            it.init.accept(this);
-        }
         if(it.type.isString) {
-            int num = counter.strCounter++;
-            String actualName = "@.str.." + num;
-            IRGlobalVariDef irGlobalVariDef = new IRGlobalVariDef(actualName);
-            irGlobalVariDef.irType = new IRType("ptr");
+            // 全局 String变量
             if(currentClassName == null && currentBlock == null) {
+                IRGlobalVariDef irGlobalVariDef = new IRGlobalVariDef("@" + it.name);
+                irGlobalVariDef.irType = new IRType("ptr");
+                irGlobalVariDef.result = new IROtherLiteral("", new IRType("ptr"));
                 irProgram.globalVarDefMap.put(it.name, irGlobalVariDef);
                 if(it.init == null) {
-                    irGlobalVariDef.result = new IROtherLiteral("null", new IRType("ptr"));
                     return;
                 }
                 if(it.init instanceof FmtString fmtString) {
                     it.init.accept(this);
+                    return;
                 } else {
-                    irGlobalVariDef.result = new IROtherLiteral(it.init.toString(), new IRType("ptr"));
+                    if(it.init instanceof PrimaryExpr primaryExpr){
+                        IRFuncDef irFuncDef = irProgram.getFuncDef("__init");
+                        currentBlock = irFuncDef.blockList.getFirst();
+                        it.init.accept(this);
+                        int count = counter.strCounter - 1;
+                        IRVariable irVariable = new IRVariable("@.str.." + String.valueOf(count), new IRType("ptr"));
+                        StoreInstr storeInstr = new StoreInstr(currentBlock, new IRVariable("@" + it.name), new IRType("ptr"), irVariable);
+                        currentBlock.instructions.add(storeInstr);
+                    } else {
+                        // TODO
+                        IRFuncDef irFuncDef = irProgram.getFuncDef("__init");
+                        currentBlock = irFuncDef.blockList.getFirst();
+                        it.init.accept(this);
+                        StoreInstr storeInstr = new StoreInstr(currentBlock, new IRVariable("@" + it.name), new IRType("ptr"), currentEntity);
+                        currentBlock.instructions.add(storeInstr);
+                    }
+                    return;
                 }
-            } else {
-                irGlobalVariDef.result = new IROtherLiteral(it.init.toString(), new IRType("ptr"));
-                int count = counter.varCounter++;
-                IRVariable irVariable = new IRVariable("%var" + String.valueOf(count), new IRType("ptr"));
-                currentBlock.instructions.add(new IR.instruction.AllocInstr(currentBlock, new IRType("ptr"), irVariable));
-                currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, irVariable, new IRType("ptr"), new IRVariable(actualName)));
+            }
+            // 局部 String变量
+            else {
+                currentReNamer.addVar(it.name);
+                int num = currentReNamer.getVarNum(it.name, false);
+                if(it.init == null) {
+                    IRVariable irVariable = new IRVariable("%" + it.name + "." + num, new IRType("ptr"));
+                    currentBlock.instructions.add(new IR.instruction.AllocInstr(currentBlock, new IRType("ptr"), irVariable));
+                    return;
+                } else {
+                    if(it.init instanceof FmtString fmtString) {
+                        it.init.accept(this);
+                        // TODO
+                        return;
+                    } else if(it.init instanceof PrimaryExpr primaryExpr) {
+                        IRVariable irVariable = new IRVariable("%" + it.name + "." + num, new IRType("ptr"));
+                        currentBlock.instructions.add(new IR.instruction.AllocInstr(currentBlock, new IRType("ptr"), irVariable));
+                        it.init.accept(this);
+                        StoreInstr storeInstr = new StoreInstr(currentBlock, irVariable, new IRType("ptr"), currentPtr);
+                        currentBlock.instructions.add(storeInstr);
+                        return;
+                    } else {
+                        // 例子：string s = s1 + s2
+                        IRVariable irVariable = new IRVariable("%" + it.name + "." + num, new IRType("ptr"));
+                        currentBlock.instructions.add(new IR.instruction.AllocInstr(currentBlock, new IRType("ptr"), irVariable));
+                        it.init.accept(this);
+                        StoreInstr storeInstr = new StoreInstr(currentBlock, irVariable, new IRType("ptr"), currentPtr);
+                        currentBlock.instructions.add(storeInstr);
+                        return;
+                    }
+                }
             }
         }
         // 全局变量
         if(currentClassName == null && currentBlock == null) {
             IRGlobalVariDef irGlobalVariDef = new IRGlobalVariDef("@" + it.name);
             irGlobalVariDef.irType = Type_To_IRType(it.type);
+            irProgram.globalVarDefMap.put(it.name, irGlobalVariDef);
             if(it.init == null){
                 if(it.type.isInt) irGlobalVariDef.result = new IRIntLiteral(0);
                 if(it.type.isBool) irGlobalVariDef.result = new IRBoolLiteral(false);
-                irProgram.globalVarDefMap.put(it.name, irGlobalVariDef);
+                if(irGlobalVariDef.irType.isPtr()) irGlobalVariDef.result = new IROtherLiteral("null", new IRType("ptr"));
                 return;
             }
             if(it.init instanceof PrimaryExpr primaryExpr) {
-                irProgram.globalVarDefMap.put(it.name, irGlobalVariDef);
-            } else {
-                if(irProgram.funcDefMap.containsKey(irGlobalVariDef.funcDef.functionName)) {
-                    irGlobalVariDef.funcDef = irProgram.funcDefMap.get(irGlobalVariDef.funcDef.functionName);
-                } else {
-                    irGlobalVariDef.funcDef = new IRFuncDef(Type_To_IRType(it.type), "@._init", new ArrayList<>(), new ArrayList<>());
-                }
-                irGlobalVariDef.funcDef.returnType = new IRType("void");
-                currentBlock = irGlobalVariDef.funcDef.addBlock(new IRBlock(irGlobalVariDef.funcDef, "entry"));
                 it.init.accept(this);
-                IRVariable addr = new IRVariable(it.name + ".addr", irGlobalVariDef.irType);
-                currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, addr, irGlobalVariDef.irType, currentEntity));
-                irProgram.funcDefMap.put(irGlobalVariDef.funcDef.functionName, irGlobalVariDef.funcDef);
-                irProgram.globalVarDefMap.put(it.name, irGlobalVariDef);
+                irGlobalVariDef.result = currentEntity;
+            } else {
+                IRType irType = Type_To_IRType(it.type);
+                if(irType.isI1()) {
+                    irGlobalVariDef.result = new IRBoolLiteral(false);
+                } else if(irType.isI32()) {
+                    irGlobalVariDef.result = new IRIntLiteral(0);
+                } else if(irType.isPtr()) {
+                    irGlobalVariDef.result = new IROtherLiteral("null", new IRType("ptr"));
+                }
+                currentEntity = currentPtr = new IRVariable("@" + it.name);
+                IRFuncDef irFuncDef;
+                if(irProgram.funcDefMap.containsKey("__init")) {
+                    irFuncDef = irProgram.funcDefMap.get("__init");
+                } else {
+                    irFuncDef = new IRFuncDef(new IRType("void"), "__init", new ArrayList<>(), new ArrayList<>());
+                    irFuncDef.addBlock(new IRBlock(irFuncDef, "entry"));
+                    irProgram.funcDefMap.put("__init", irFuncDef);
+                }
+                currentBlock = irFuncDef.blockList.getFirst();
+                it.init.accept(this);
+                currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, new IRVariable("@" + it.name), irGlobalVariDef.irType, currentEntity));
                 currentBlock = null;
             }
-        } else {   // 局部变量
+        }
+        // 局部变量
+        else {
+            currentReNamer.addVar(it.name);
             int num = currentReNamer.getVarNum(it.name, false);
-            if(num == -1) {
-                currentReNamer.addVar(it.name);
-                num = 1;
-            } else {
-                num++;
-            }
-            IRVariable irVariable = new IRVariable("%" + it.name + "." + num, Type_To_IRType(it.type));
-            currentBlock.instructions.add(new IR.instruction.AllocInstr(currentBlock, irVariable.type, irVariable));
+            IRVariable irVariable = new IRVariable("%" + it.name + "." + num, new IRType("ptr"));
+            currentBlock.instructions.add(new IR.instruction.AllocInstr(currentBlock, Type_To_IRType(it.type), irVariable));
             if(it.init != null) {
-                currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, irVariable, irVariable.type, currentEntity));
+                it.init.accept(this);
+                currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, irVariable, Type_To_IRType(it.type), currentEntity));
+                currentPtr = irVariable;
+            } else {
+                if(it.type.isInt) {
+                    currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, irVariable, new IRType("i32"), new IRIntLiteral(0)));
+                    currentEntity = new IRIntLiteral(0);
+                    currentPtr = irVariable;
+                } else if(it.type.isBool) {
+                    currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, irVariable, new IRType("bool"), new IRBoolLiteral(false)));
+                    currentEntity = new IRBoolLiteral(false);
+                    currentPtr = irVariable;
+                }
             }
-            currentEntity = irVariable;
         }
     }
 
     @Override public void visit(ArrayExpr it) {
+
         it.baseType.accept(this);
-        IRVariable result = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
-        String actualName = it.baseType.type.typeName;
-        LoadInstr loadInstr = new LoadInstr(currentBlock, new IRVariable(actualName), result, Type_To_IRType(it.baseType.type));
-        currentBlock.instructions.add(loadInstr);
+        IREntity lhsValue = currentEntity;
         it.size.accept(this);
-        int size = 0;
-        if(currentEntity instanceof IRIntLiteral literal) {
-            size = literal.value;
-        } else {
-            throw new semanticError("ArrayExpr size is not a int", it.pos);
-        }
+        IREntity size = currentEntity;
 
+//        IRVariable result = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
+//        String actualName = it.baseType.type.typeName;
+//        LoadInstr loadInstr = new LoadInstr(currentBlock, new IRVariable(actualName), result, Type_To_IRType(it.baseType.type));
+//        currentBlock.instructions.add(loadInstr);
+//        currentEntity = result;
+//        currentPtr = new IRVariable(actualName);
+
+        String actualName = it.baseType.type.typeName;
         IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
-        GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, retValue, actualName, result);
-        geteleptrInstr.idxList.add(new IRIntLiteral(size));
+        GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, retValue, actualName, lhsValue, Type_To_IRType(it.type));
+        geteleptrInstr.idxList.add(size);
         currentBlock.instructions.add(geteleptrInstr);
-        currentEntity = retValue;
+        currentEntity = currentPtr = retValue;
 
-        IRVariable result1 = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
+        IRVariable result1 = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
         LoadInstr loadInstr1 = new LoadInstr(currentBlock, retValue, result1, Type_To_IRType(it.type));
         currentBlock.instructions.add(loadInstr1);
-
-        currentPtr = loadInstr1.result;
+        currentEntity = loadInstr1.result;
+        currentPtr = retValue;
     }
 
     @Override public void visit(AssignExpr it) {
         it.lhs.accept(this);
         var lhsValue = currentPtr;
+        if(it.lhs.type.isString){
+            it.rhs.accept(this);
+            IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
+            CallInstr callInstr = new CallInstr(currentBlock, "string.copy", retValue);
+            callInstr.argTypes.add(new IRType("ptr"));
+            callInstr.args.add(currentEntity);
+            currentBlock.instructions.add(callInstr);
+            StoreInstr storeInstr = new StoreInstr(currentBlock, lhsValue, new IRType("ptr"), retValue);
+            currentBlock.instructions.add(storeInstr);
+            currentEntity = retValue;
+            currentPtr = lhsValue;
+            return;
+        }
         it.rhs.accept(this);
         var rhsValue = currentEntity;
-
         StoreInstr storeInstr = new StoreInstr(currentBlock, lhsValue, Type_To_IRType(it.lhs.type), rhsValue);
         currentBlock.instructions.add(storeInstr);
         currentPtr = null;
@@ -289,8 +384,8 @@ public class IRBuilder implements ASTVisitor {
                 phiInstr.addBranch(currentEntity, block1);
                 phiInstr.addBranch(lhsValue, block2);
             } else {
-                phiInstr.addBranch(lhsValue, thenBlock);
-                phiInstr.addBranch(currentEntity, endBlock);
+                phiInstr.addBranch(lhsValue, block1);
+                phiInstr.addBranch(currentEntity, block2);
             }
             currentEntity = retValue;
             return;
@@ -377,7 +472,7 @@ public class IRBuilder implements ASTVisitor {
                 currentBlock.instructions.add(new IR.instruction.BinaryInstr(currentBlock, retValue, it.op, lhsValue, rhsValue));
             }
         }
-        currentEntity = retValue;
+        currentEntity = currentPtr = retValue;
     }
 
     @Override public void visit(ConditionalExpr it) {
@@ -396,12 +491,12 @@ public class IRBuilder implements ASTVisitor {
             currentBlock.parent.addBlock(thenBlock);
             currentBlock = thenBlock;
             it.trueBranch.accept(this);
-            thenBlock.instructions.add(new IR.instruction.JumpInstr(thenBlock, backBlock));
+            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, backBlock));
             currentBlock = backBlock;
             currentBlock.parent.addBlock(elseBlock);
             currentBlock = elseBlock;
             it.falseBranch.accept(this);
-            elseBlock.instructions.add(new IR.instruction.JumpInstr(elseBlock, backBlock));
+            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, backBlock));
             currentBlock = backBlock;
             currentBlock.parent.addBlock(backBlock);
         }
@@ -415,23 +510,29 @@ public class IRBuilder implements ASTVisitor {
         String actualFuncName = it.funcName;
         IRVariable result = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
         CallInstr callInstr = new CallInstr(currentBlock, actualFuncName, result);
-        IRFuncDef funcDef = irProgram.getFuncDef(actualFuncName);
-        callInstr.argTypes.addAll(funcDef.parameterTypeList);
+        // 错误：不能去找函数声明，因为可能在后面
         for(int i = 0; i < it.callExpList.expList.size(); i++) {
             it.callExpList.expList.get(i).accept(this);
             callInstr.args.add(currentEntity);
+            callInstr.argTypes.add(currentEntity.type);
         }
         currentBlock.instructions.add(callInstr);
         currentEntity = callInstr.result;
     }
 
     @Override public void visit(MemberExpr it) {
+        // 指令示例：
+        // %z = getelementptr %class.C2, ptr %obj, i32 0, i32 2
+        // load i32 40, ptr %z
+        // result = getelementptr classname, ptr currentptr, i32 0, i32 2
+        // load i32 retvalue, ptr result
         it.base.accept(this);
-        IRVariable ptr = currentPtr;
+        // 错误：不是currentPtr
+        IREntity ptr = currentEntity;
         ClassInfor struct = gScope.getClassInfo(it.base.type.typeName);
-        IRVariable result = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
-        String className = "class.." + it.base.type.typeName;
-        GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, result, className, ptr);
+        IRVariable result = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
+        String className = "%class.." + it.base.type.typeName;
+        GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, result, className, ptr, Type_To_IRType(it.type));
         geteleptrInstr.idxList.add(new IRIntLiteral(0));
         struct.varNames.forEach(varName -> {
             if(varName.equals(it.memberName)){
@@ -439,22 +540,41 @@ public class IRBuilder implements ASTVisitor {
             }
         });
         currentBlock.instructions.add(geteleptrInstr);
-        currentPtr = geteleptrInstr.result;
+        IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
+        LoadInstr loadInstr = new LoadInstr(currentBlock, result, retValue, Type_To_IRType(it.type));
+        currentBlock.instructions.add(loadInstr);
+        currentEntity = retValue;
+        currentPtr = result;
     }
 
     @Override public void visit(MethodCallExpr it) {
         it.base.accept(this);
-        IRVariable ptr = currentPtr;
-        String className = ptr.type.className;
-        String funcName = className + ".." + it.methodName;
+        IREntity irEntity = currentEntity;
+        String className = irEntity.type.className;
+        String funcName = "";
+        if(it.base.type.isString) {
+            funcName = "string." + it.methodName;
+        } else if(it.base.type.isClass) {
+            funcName = className + ".." + it.methodName;
+        } else if(it.base.type.dim > 0){
+            funcName = "array.size";
+        } else {
+            System.out.println("maybe a bug");
+        }
         IRFuncDef funcDef = irProgram.getFuncDef(funcName);
-        CallInstr callInstr = new CallInstr(currentBlock, funcName, ptr);
-        callInstr.argTypes.addAll(funcDef.parameterTypeList);
-        callInstr.args.add(ptr);
+        CallInstr callInstr = new CallInstr(currentBlock, funcName, null);
+        callInstr.args.add(irEntity);
+        callInstr.argTypes.add(new IRType("ptr"));
         if(it.callExpList != null){
             it.callExpList.expList.forEach(e -> {
                 e.accept(this);
-                callInstr.args.add(currentPtr);
+                // 错误：分情况加入参数
+                if(e.type.isInt || e.type.isBool || e.type.isNull) {
+                    callInstr.args.add(currentEntity);
+                } else if(e.type.isString || e.type.isClass){
+                    callInstr.args.add(currentPtr);
+                }
+                callInstr.argTypes.add(Type_To_IRType(e.type));
             });
         }
         if(it.type.isVoid){
@@ -469,27 +589,33 @@ public class IRBuilder implements ASTVisitor {
 
     @Override public void visit(NewArrayExpr it) {
         IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
-        CallInstr callInstr = new CallInstr(currentBlock, "__array.alloca_inside", retValue);
+        CallInstr callInstr = new CallInstr(currentBlock, "__array.alloca", retValue);
         ArrayList<IREntity> sizeList = new ArrayList<>();
+        callInstr.argTypes.add(new IRType("i32"));
+        callInstr.args.add(new IRIntLiteral(4));
+        callInstr.argTypes.add(new IRType("i32"));
+        callInstr.args.add(new IRIntLiteral(it.type.dim));
+        callInstr.argTypes.add(new IRType("i32"));
+        callInstr.args.add(new IRIntLiteral(it.size.size()));
         it.size.forEach(e -> {
             e.accept(this);
             callInstr.args.add(currentEntity);
             callInstr.argTypes.add(new IRType("i32"));
         });
         currentBlock.instructions.add(callInstr);
-        currentEntity = retValue;
+        currentEntity = currentPtr = retValue;
     }
 
     @Override public void visit(Arrayconst it) {
         IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
-        CallInstr callInstr = new CallInstr(currentBlock, "malloc", retValue);
+        CallInstr callInstr = new CallInstr(currentBlock, "_malloc", retValue);
         callInstr.argTypes.add(new IRType("i32"));
         callInstr.args.add(new IRIntLiteral(it.literal.size() * 4));
         for(int i = 0; i < it.literal.size(); i++) {
             it.literal.get(i).accept(this);
             IREntity entity = currentEntity;
             IRVariable retValue1 = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
-            GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, retValue1, String.valueOf(i), retValue);
+            GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, retValue1, String.valueOf(i), retValue, Type_To_IRType(it.literal.get(i).type));
             currentBlock.instructions.add(geteleptrInstr);
             currentBlock.instructions.add(new StoreInstr(currentBlock, retValue1, new IRType("ptr"), entity));
         }
@@ -500,11 +626,11 @@ public class IRBuilder implements ASTVisitor {
         if(it.arrayconst == null) {
             IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
             if(it.isInt){
-                CallInstr callInstr = new CallInstr(currentBlock, "malloc", retValue);
+                CallInstr callInstr = new CallInstr(currentBlock, "_malloc", retValue);
                 callInstr.argTypes.add(new IRType("i32"));
                 callInstr.args.add(new IRIntLiteral(4));
             } else if(it.isTrue || it.isFalse){
-                CallInstr callInstr = new CallInstr(currentBlock, "malloc", retValue);
+                CallInstr callInstr = new CallInstr(currentBlock, "_malloc", retValue);
                 callInstr.argTypes.add(new IRType("i32"));
                 callInstr.args.add(new IRIntLiteral(1));
             } else if(it.isString){
@@ -514,26 +640,26 @@ public class IRBuilder implements ASTVisitor {
                 irGlobalVariDef.irType = new IRType("ptr");
                 irGlobalVariDef.result = new IROtherLiteral(actualName, new IRType("ptr"));
                 irProgram.globalVarDefMap.put(actualName, irGlobalVariDef);
-                CallInstr callInstr = new CallInstr(currentBlock, "malloc", retValue);
+                CallInstr callInstr = new CallInstr(currentBlock, "_malloc", retValue);
                 callInstr.argTypes.add(new IRType("ptr"));
                 callInstr.args.add(new IRIntLiteral(4));
             } else if(it.isNull){
                 // TODO
-                CallInstr callInstr = new CallInstr(currentBlock, "malloc", retValue);
+                CallInstr callInstr = new CallInstr(currentBlock, "_malloc", retValue);
                 callInstr.argTypes.add(new IRType("i32"));
                 callInstr.args.add(new IRIntLiteral(4));
             }
             currentEntity = retValue;
         }
         IRVariable irVariable = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
-        CallInstr callInstr = new CallInstr(currentBlock, "malloc", irVariable);
+        CallInstr callInstr = new CallInstr(currentBlock, "_malloc", irVariable);
         callInstr.argTypes.add(new IRType("ptr"));
         callInstr.args.add(new IRIntLiteral(it.arrayconst.literal.size() * 4));
         for(int i = 0; i < it.arrayconst.literal.size(); i++) {
             it.arrayconst.literal.get(i).accept(this);
             IREntity entity = currentEntity;
             IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
-            GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, retValue, String.valueOf(i), entity);
+            GeteleptrInstr geteleptrInstr = new GeteleptrInstr(currentBlock, retValue, String.valueOf(i), entity, Type_To_IRType(it.arrayconst.literal.get(i).type));
             currentBlock.instructions.add(geteleptrInstr);
             currentBlock.instructions.add(new StoreInstr(currentBlock, irVariable, new IRType("ptr"), retValue));
         }
@@ -542,7 +668,7 @@ public class IRBuilder implements ASTVisitor {
 
     @Override public void visit(NewVarExpr it) {
         IRVariable retValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("ptr"));
-        CallInstr callInstr = new CallInstr(currentBlock, "malloc", retValue);
+        CallInstr callInstr = new CallInstr(currentBlock, "_malloc", retValue);
         int size = 0;
         if(it.type.isClass){
             size = irProgram.getClassDef(it.type.typeName).classSize;
@@ -552,7 +678,7 @@ public class IRBuilder implements ASTVisitor {
         callInstr.argTypes.add(new IRType("i32"));
         callInstr.args.add(new IRIntLiteral(size));
         currentBlock.instructions.add(callInstr);
-        currentEntity = retValue;
+        currentEntity = currentPtr = retValue;
     }
 
     @Override public void visit(ParallelExp it) {
@@ -569,6 +695,7 @@ public class IRBuilder implements ASTVisitor {
         IRVariable retValue1 = new IRVariable("%var" + String.valueOf(counter.varCounter++), new IRType("i32"));
         currentBlock.instructions.add(new IR.instruction.BinaryInstr(currentBlock, retValue1, option, currentEntity, new IRIntLiteral(1)));
         currentBlock.instructions.add(new IR.instruction.StoreInstr(currentBlock, currentPtr, new IRType("i32"), retValue1));
+        // 错误：这里不能更新currentEntity
     }
 
     @Override public void visit(PrefixExpr it) {
@@ -589,22 +716,52 @@ public class IRBuilder implements ASTVisitor {
                 currentEntity = new IROtherLiteral(it.identifier, new IRType("ptr"));
             } else {
                 int num = currentReNamer.getVarNum(it.identifier, false);
-                String actualName = it.identifier;
                 if(num > 0) { // 局部变量
-                    actualName = "%" + it.identifier + "." + num;
+                    String actualName = "%" + it.identifier + "." + num;
+                    IRVariable ptr = new IRVariable(actualName);
+                    IRVariable result = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
+                    currentBlock.instructions.add(new IR.instruction.LoadInstr(currentBlock, ptr, result, Type_To_IRType(it.type)));
+                    currentEntity = result;
+                    currentPtr = ptr;
                 } else { // 全局变量 & 类变量
-                    // TODO
                     if(currentClassName != null) {
                         currentEntity = new IRVariable("%this", new IRType("ptr"));
                     } else {
-                        actualName = "@" + it.identifier;
+                        IRVariable loadValue = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
+                        if(it.type.isString){
+                            int count = currentReNamer.getVarNum(it.identifier, false);
+                            String actualName1;
+                            if(count != -1) actualName1 = "%" + it.identifier + "." + count;
+                            else actualName1 = "@" + it.identifier;
+                            LoadInstr loadInstr1 = new LoadInstr(currentBlock, new IRVariable(actualName1), loadValue, new IRType("ptr"));
+                            currentBlock.instructions.add(loadInstr1);
+                            currentEntity = loadValue;
+                            currentPtr = new IRVariable(actualName1);
+                            return;
+                        }
+                        // 错误：全局变量都是指针，需要 load出来
+                        String actualName = "@" + it.identifier;
+                        IRVariable ptr = new IRVariable(actualName);
+//                        IRGlobalVariDef irGlobalVariDef = new IRGlobalVariDef(actualName);
+                        LoadInstr loadInstr = new LoadInstr(currentBlock, ptr, loadValue, Type_To_IRType(it.type));
+                        currentBlock.instructions.add(loadInstr);
+                        currentEntity = loadValue;
+                        currentPtr = ptr;
+//                        if (it.type.isBool) {
+//                            irGlobalVariDef.irType = new IRType("i1");
+//                            irGlobalVariDef.result = new IRBoolLiteral(false);
+//                            irProgram.globalVarDefMap.put(it.identifier, irGlobalVariDef);
+//                        } else if(it.type.isInt){
+//                            irGlobalVariDef.irType = new IRType("i32");
+//                            irGlobalVariDef.result = new IRIntLiteral(0);
+//                            irProgram.globalVarDefMap.put(it.identifier, irGlobalVariDef);
+//                        } else if(it.type.dim > 0){
+//                            irGlobalVariDef.irType = new IRType("ptr");
+//                            irGlobalVariDef.result = new IROtherLiteral("null", new IRType("ptr"));
+//                            irProgram.globalVarDefMap.put(it.identifier, irGlobalVariDef);
+//                        }
                     }
                 }
-                IRVariable ptr = new IRVariable(actualName);
-                IRVariable result = new IRVariable("%var" + String.valueOf(counter.varCounter++), Type_To_IRType(it.type));
-                currentBlock.instructions.add(new IR.instruction.LoadInstr(currentBlock, ptr, result, Type_To_IRType(it.type)));
-                currentEntity = result;
-                currentPtr = ptr;
             }
         } else if(it.isTrue) {
             currentEntity = new IRBoolLiteral(true);
@@ -621,16 +778,20 @@ public class IRBuilder implements ASTVisitor {
             IRGlobalVariDef irGlobalVariDef = new IRGlobalVariDef(actualName);
             irGlobalVariDef.irType = new IRType("ptr");
             irGlobalVariDef.result = new IROtherLiteral(it.stringLiteral, new IRType("ptr"));
-            irProgram.globalVarDefMap.put(it.stringLiteral, irGlobalVariDef);
-            currentEntity = new IRVariable(actualName);
+            irProgram.globalVarDefMap.put(actualName, irGlobalVariDef);
+            currentEntity = currentPtr = new IRVariable(actualName);
         } else if(it.isFmtString){
             it.fmtString.accept(this);
         } else if(it.isLiteral){
             it.literal.accept(this);
+        } else if(it.isNull){
+            currentEntity = new IROtherLiteral("null", new IRType("ptr"));
+            currentEntity.type = new IRType("ptr");
         }
     }
 
     @Override public void visit(FmtString it) {
+        // TODO
         int num = counter.strCounter;
         String actualName = "@.str.." + num;
         IRGlobalVariDef irGlobalVariDef = new IRGlobalVariDef(actualName);
@@ -652,7 +813,7 @@ public class IRBuilder implements ASTVisitor {
             callInstr.args.add(irEntity2);
             currentBlock.instructions.add(callInstr);
 
-            int count = counter.varCounter++;
+            int count = counter.strCounter++;
             String actualName1 = "@.str.." + count;
             IRGlobalVariDef irGlobalVariDef1 = new IRGlobalVariDef(actualName1);
             irGlobalVariDef1.irType = new IRType("ptr");
@@ -716,12 +877,12 @@ public class IRBuilder implements ASTVisitor {
             currentBlock.parent.addBlock(condBlock);
             currentBlock = condBlock;
             it.conditionExp.accept(this);
-            condBlock.instructions.add(new IR.instruction.BrInstr(condBlock, (IRVariable)currentEntity, bodyBlock, stepBlock));
+            currentBlock.instructions.add(new IR.instruction.BrInstr(currentBlock, (IRVariable)currentEntity, bodyBlock, backBlock));
         } else {
             currentBlock.parent.addBlock(condBlock);
             currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, condBlock));
             currentBlock = condBlock;
-            condBlock.instructions.add(new IR.instruction.JumpInstr(condBlock, bodyBlock));
+            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, bodyBlock));
         }
 
         if(it.stmt != null){
@@ -754,9 +915,10 @@ public class IRBuilder implements ASTVisitor {
     @Override public void visit(IfStmt it) {
         it.condition.accept(this);
 
-        IRBlock thenBlock = new IRBlock(currentBlock.parent, "if.then");
-        IRBlock elseBlock = new IRBlock(currentBlock.parent, "if.else");
-        IRBlock backBlock = new IRBlock(currentBlock.parent, "if.back");
+        int num = counter.ifCounter++;
+        IRBlock thenBlock = new IRBlock(currentBlock.parent, "if.then." + num);
+        IRBlock elseBlock = new IRBlock(currentBlock.parent, "if.else." + num);
+        IRBlock backBlock = new IRBlock(currentBlock.parent, "if.back." + num);
 
         // 两种情况，一种是直接的bool值，一种是变量
         if(currentEntity instanceof IRBoolLiteral literal) {
@@ -766,21 +928,22 @@ public class IRBuilder implements ASTVisitor {
                 currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, elseBlock));
             }
         } else {
-            currentBlock.instructions.add(new IR.instruction.BrInstr(currentBlock, (IRVariable)currentEntity, thenBlock, elseBlock));
+            currentBlock.instructions.add(new IR.instruction.BrInstr(currentBlock, currentEntity, thenBlock, elseBlock));
         }
 
+        // 错误：这里必须是currentBlock,比如处理if的嵌套
         if(it.thenStmt != null) {
             currentBlock.parent.addBlock(thenBlock);
             currentBlock = thenBlock;
             currentReNamer = new ReNamer(currentReNamer);
             it.thenStmt.accept(this);
-            thenBlock.instructions.add(new IR.instruction.JumpInstr(thenBlock, backBlock));
+            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, backBlock));
             currentReNamer = currentReNamer.getParent();
             currentBlock = backBlock;
         } else {
             currentBlock.parent.addBlock(thenBlock);
             currentBlock = thenBlock;
-            thenBlock.instructions.add(new IR.instruction.JumpInstr(thenBlock, backBlock));
+            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, backBlock));
             currentBlock = backBlock;
         }
 
@@ -789,16 +952,17 @@ public class IRBuilder implements ASTVisitor {
             currentBlock = elseBlock;
             currentReNamer = new ReNamer(currentReNamer);
             it.elseStmt.accept(this);
-            elseBlock.instructions.add(new IR.instruction.JumpInstr(elseBlock, backBlock));
+            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, backBlock));
             currentReNamer = currentReNamer.getParent();
             currentBlock = backBlock;
         } else{
             currentBlock.parent.addBlock(elseBlock);
             currentBlock = elseBlock;
-            elseBlock.instructions.add(new IR.instruction.JumpInstr(elseBlock, backBlock));
+            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, backBlock));
             currentBlock = backBlock;
         }
         currentBlock.parent.addBlock(backBlock);
+        currentBlock = backBlock;
     }
     @Override public void visit(ReturnStmt it) {
         if(it.expr != null) {
@@ -820,23 +984,23 @@ public class IRBuilder implements ASTVisitor {
         it.condition.accept(this);
         currentScope = new LoopScope(currentScope);
 
-        IRBlock backBlock = new IRBlock(currentBlock.parent, "for.back");
-        IRBlock condBlock = new IRBlock(currentBlock.parent, "for.cond");
-        IRBlock bodyBlock = new IRBlock(currentBlock.parent, "for.body");
+        int num = counter.whileCounter++;
+        IRBlock backBlock = new IRBlock(currentBlock.parent, "while.back." + num);
+        IRBlock condBlock = new IRBlock(currentBlock.parent, "while.cond." + num);
+        IRBlock bodyBlock = new IRBlock(currentBlock.parent, "while.body." + num);
         currentScope.loopNext = bodyBlock;
         currentScope.loopEnd = backBlock;
+        currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, condBlock));
 
         if(it.condition != null){
             currentBlock.parent.addBlock(condBlock);
-            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, condBlock));
             currentBlock = condBlock;
             it.condition.accept(this);
-            condBlock.instructions.add(new IR.instruction.BrInstr(condBlock, (IRVariable)currentEntity, bodyBlock, backBlock));
+            currentBlock.instructions.add(new IR.instruction.BrInstr(currentBlock, (IRVariable)currentEntity, bodyBlock, backBlock));
         }
 
         if(it.body != null){
             currentBlock.parent.addBlock(bodyBlock);
-            currentBlock.instructions.add(new IR.instruction.JumpInstr(currentBlock, bodyBlock));
             currentBlock = bodyBlock;
             currentReNamer = new ReNamer(currentReNamer);
             it.body.accept(this);
@@ -845,6 +1009,7 @@ public class IRBuilder implements ASTVisitor {
         }
 
         currentBlock.parent.addBlock(backBlock);
+        currentBlock = backBlock;
         currentScope = currentScope.parentScope();
     }
     @Override public void visit(EmptyStmt it) {}

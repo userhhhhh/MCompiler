@@ -4,13 +4,16 @@ import java.util.HashMap;
 
 public class ReNamer {
     public ReNamer parent;
+    public HashMap<String, Integer> totalVarNames = new HashMap<>();
     public HashMap<String, Integer> varNames = new HashMap<>();
 
     public ReNamer(ReNamer parent) {
         this.parent = parent;
         if (parent != null) {
-            this.varNames = parent.varNames;
+            this.varNames = new HashMap<>();
+            this.varNames.putAll(parent.varNames);
         }
+        this.totalVarNames = parent.totalVarNames;
     }
     public ReNamer getParent() {
         return parent;

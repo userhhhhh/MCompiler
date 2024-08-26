@@ -58,8 +58,10 @@ int string_length(char *str) {
 
 char *string_substring(char *str, int left, int right) {
     int length = right - left;
-    char *buffer = malloc(length + 1);
-    memcpy(buffer, str + left, length);
+    char *buffer = (char *) malloc((length + 1) * sizeof(char));
+    for (int i = 0; i < length; i++) {
+        buffer[i] = str[left + i];
+    }
     buffer[length] = '\0';
     return buffer;
 }
@@ -113,7 +115,6 @@ int array_size(void *arr) {
     return ((int*)arr)[-1];
 }
 
-// 这里n表示n个i32类型的数据
 // malloc函数分配的内存空间单位是字节
 void *_malloc(int n){
     return malloc(n);
